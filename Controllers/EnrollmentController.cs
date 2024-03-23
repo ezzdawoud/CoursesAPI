@@ -4,6 +4,7 @@ using Courses.Models;
 using Microsoft.AspNetCore.Identity.UI.Services;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.EntityFrameworkCore;
 
 // For more information on enabling Web API for empty projects, visit https://go.microsoft.com/fwlink/?LinkID=397860
 
@@ -26,12 +27,12 @@ namespace Courses.Controllers
 
 
         }
-  
+
         // POST api/<EnrollmentController>
-        [HttpPost("Enrollment{token},{id},{courseId},{CardId}")]
+        [HttpPost("Enrollment")]
         public async Task<IActionResult> Post(string token, string id, int courseId, int CardId)
         {
-            
+
             Users user = await _tokenGenerator.GetUserFromToken(token);
             if (user == null)
             {
@@ -74,6 +75,40 @@ namespace Courses.Controllers
 
         }
 
-      
+        [HttpPost("get user Courses")]
+        public async Task<IActionResult> Post(string token, string id)
+        {
+            Users user = await _tokenGenerator.GetUserFromToken(token);
+            if (user == null)
+            {
+                return BadRequest("user Not Found !");
+            }
+            if (id != user.Id)
+            {
+                return BadRequest("user not Found");
+            }
+            List<Enrollment> enrollments = await _context.Enrollments
+       .Where(m => m.UserId == user.Id)
+       .ToListAsync();
+
+            List<Models.Courses> courses = new List<Models.Courses>(); // Create a list to store courses
+
+            foreach (var enrollment in enrollments)
+            {
+                Models.Courses course = await _context.Courses
+                    .FirstOrDefaultAsync(m => m.courseId == enrollment.CouresId);
+
+                if (course != null)
+                {
+                    courses.Add(course); // Add the course to the list
+                }
+            }
+            return Ok(courses);
+
+
+        }
+
+
+
     }
 }

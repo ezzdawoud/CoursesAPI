@@ -25,7 +25,7 @@ namespace Courses.Controllers
 
 
         // GET: api/<coursesController>
-        [HttpGet("get courses/{token},{id}")]
+        [HttpGet("get courses")]
         public async Task<ActionResult<IEnumerable<Models.Courses>>> GetCourses(string token, string id)
         {
             Users user = await _tokenGenerator.GetUserFromToken(token);
@@ -43,7 +43,7 @@ namespace Courses.Controllers
                 return BadRequest("You don't have access to show this");
             }
         }
-        [HttpPost("insert Course/{token},{id}")]
+        [HttpPost("insert Course")]
         public async Task<ActionResult<string>> insetCourse(string token, string id, Models.Courses course)
         {
             try
@@ -76,6 +76,27 @@ namespace Courses.Controllers
             }
         }
 
-       
+        [HttpPost("get course")]
+        public async Task<ActionResult<Models.Courses>> getCourse(string token, int courseId)
+        {
+            Users user = await _tokenGenerator.GetUserFromToken(token);
+            if (user == null)
+            {
+                return BadRequest("user Not Found !");
+            }
+           
+
+            var course = await _context.Courses.FirstOrDefaultAsync(m => m.courseId == courseId);
+            if (course == null)
+            {
+                return NotFound("course Not Found !");
+            }
+
+            return course;
+        }
+
+
+
+
     }
 }

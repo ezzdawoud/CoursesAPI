@@ -19,6 +19,18 @@ builder.Services.AddControllers();
 builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen();
 
+var MyAllowSpecificOrigins = "_myAllowSpecificOrigins";
+builder.Services.AddCors(options =>
+{
+    options.AddPolicy("AllowLocalhost4200",
+        builder =>
+        {
+            builder.WithOrigins("http://localhost:4200")
+                   .AllowAnyHeader()
+                   .AllowAnyMethod();
+        });
+});
+
 builder.Configuration.AddJsonFile("appsettings.json", optional: true, reloadOnChange: true);
 builder.Services.AddScoped<GenarateToken>(); // Add this line to register the GenarateToken class
 
@@ -54,6 +66,7 @@ var app = builder.Build();
 
 //Seed.SeedUsersAndRoles(app);
 
+app.UseCors("AllowLocalhost4200");
 
 // Configure the HTTP request pipeline.
 if (app.Environment.IsDevelopment())

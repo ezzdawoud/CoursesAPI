@@ -43,6 +43,9 @@ namespace Courses.Controllers
         public async Task<IActionResult> Get(string token)
         {
             Users user = await _tokenGenerator.GetUserFromToken(token);
+            if(user == null) { 
+            return BadRequest("the token is not valid !");    
+            }
             var roles = await _userManeger.GetRolesAsync(user);
             if (roles.FirstOrDefault() == "admin") {
                 return Ok(_context.Users.ToList());
@@ -54,15 +57,17 @@ namespace Courses.Controllers
         }
 
         // GET api/<UsersController>/5
-        [HttpPost("{email},{password}")]
-        public async Task<IActionResult> Login(string email, string password)
+        [HttpPost("singin")]
+        public async Task<IActionResult> Login([FromBody] LoginModel model)
         {
+            string email = model.Email;
+            string password = model.Password;
 
             var user = await _userManeger.FindByEmailAsync(email);
 
             if (user == null)
             {
-                return BadRequest("Invalid login attempt.");
+                return NotFound("didnt find this Email");
             }
             if(user.EmailConfirmed == false)
             {
@@ -88,9 +93,13 @@ namespace Courses.Controllers
             }
             else
             {
-                ModelState.AddModelError("", "Invalid login attempt.");
-                return BadRequest(ModelState);
+                return BadRequest("Wrong Passwrod!");
             }
+        }
+        public class LoginModel
+        {
+            public string Email { get; set; }
+            public string Password { get; set; }
         }
 
         [HttpPost("logout")]
@@ -115,7 +124,7 @@ namespace Courses.Controllers
         }
 
         // POST api/<UsersController>
-        [HttpPost("register/{registerViewModel}")]
+        [HttpPost("register")]
         public async Task<IActionResult> Register(Users registerViewModel)
         {
 
