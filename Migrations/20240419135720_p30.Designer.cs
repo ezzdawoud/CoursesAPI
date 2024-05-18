@@ -4,6 +4,7 @@ using Courses.Data;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
 using Microsoft.EntityFrameworkCore.Metadata;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 
 #nullable disable
@@ -11,9 +12,10 @@ using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 namespace Courses.Migrations
 {
     [DbContext(typeof(Connections))]
-    partial class ConnectionsModelSnapshot : ModelSnapshot
+    [Migration("20240419135720_p30")]
+    partial class p30
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder
@@ -71,37 +73,6 @@ namespace Courses.Migrations
                     b.ToTable("Comments");
                 });
 
-            modelBuilder.Entity("Courses.Models.Contact", b =>
-                {
-                    b.Property<int>("ContactId")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("int");
-
-                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("ContactId"), 1L, 1);
-
-                    b.Property<string>("Email")
-                        .IsRequired()
-                        .HasColumnType("nvarchar(max)");
-
-                    b.Property<string>("Message")
-                        .IsRequired()
-                        .HasColumnType("nvarchar(max)");
-
-                    b.Property<string>("subject")
-                        .IsRequired()
-                        .HasColumnType("nvarchar(max)");
-
-                    b.Property<string>("userId")
-                        .IsRequired()
-                        .HasColumnType("nvarchar(450)");
-
-                    b.HasKey("ContactId");
-
-                    b.HasIndex("userId");
-
-                    b.ToTable("Contacts");
-                });
-
             modelBuilder.Entity("Courses.Models.Courses", b =>
                 {
                     b.Property<int>("courseId")
@@ -144,14 +115,12 @@ namespace Courses.Migrations
 
                     b.Property<string>("UsersId")
                         .IsRequired()
-                        .HasColumnType("nvarchar(450)");
+                        .HasColumnType("nvarchar(max)");
 
                     b.Property<int>("numberOfLessons")
                         .HasColumnType("int");
 
                     b.HasKey("courseId");
-
-                    b.HasIndex("UsersId");
 
                     b.ToTable("Courses");
                 });
@@ -211,72 +180,6 @@ namespace Courses.Migrations
                     b.HasIndex("CoursescourseId");
 
                     b.ToTable("Lessons");
-                });
-
-            modelBuilder.Entity("Courses.Models.Rating", b =>
-                {
-                    b.Property<int>("RatingId")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("int");
-
-                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("RatingId"), 1L, 1);
-
-                    b.Property<int>("CoursescourseId")
-                        .HasColumnType("int");
-
-                    b.Property<int>("courseId")
-                        .HasColumnType("int");
-
-                    b.Property<int>("rating")
-                        .HasColumnType("int");
-
-                    b.Property<string>("usersId")
-                        .IsRequired()
-                        .HasColumnType("nvarchar(450)");
-
-                    b.HasKey("RatingId");
-
-                    b.HasIndex("CoursescourseId");
-
-                    b.HasIndex("usersId");
-
-                    b.ToTable("Rating");
-                });
-
-            modelBuilder.Entity("Courses.Models.SubComments", b =>
-                {
-                    b.Property<int>("SubCommentsId")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("int");
-
-                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("SubCommentsId"), 1L, 1);
-
-                    b.Property<int>("CommentsId")
-                        .HasColumnType("int");
-
-                    b.Property<int>("LessonsId")
-                        .HasColumnType("int");
-
-                    b.Property<string>("subComments")
-                        .IsRequired()
-                        .HasColumnType("nvarchar(max)");
-
-                    b.Property<string>("userId")
-                        .IsRequired()
-                        .HasColumnType("nvarchar(max)");
-
-                    b.Property<string>("usersId")
-                        .HasColumnType("nvarchar(450)");
-
-                    b.HasKey("SubCommentsId");
-
-                    b.HasIndex("CommentsId");
-
-                    b.HasIndex("LessonsId");
-
-                    b.HasIndex("usersId");
-
-                    b.ToTable("SubComments");
                 });
 
             modelBuilder.Entity("Courses.Models.Users", b =>
@@ -510,28 +413,6 @@ namespace Courses.Migrations
                     b.Navigation("Users");
                 });
 
-            modelBuilder.Entity("Courses.Models.Contact", b =>
-                {
-                    b.HasOne("Courses.Models.Users", "User")
-                        .WithMany()
-                        .HasForeignKey("userId")
-                        .OnDelete(DeleteBehavior.Cascade)
-                        .IsRequired();
-
-                    b.Navigation("User");
-                });
-
-            modelBuilder.Entity("Courses.Models.Courses", b =>
-                {
-                    b.HasOne("Courses.Models.Users", "Users")
-                        .WithMany()
-                        .HasForeignKey("UsersId")
-                        .OnDelete(DeleteBehavior.Cascade)
-                        .IsRequired();
-
-                    b.Navigation("Users");
-                });
-
             modelBuilder.Entity("Courses.Models.Enrollment", b =>
                 {
                     b.HasOne("Courses.Models.Courses", "Coures")
@@ -560,50 +441,6 @@ namespace Courses.Migrations
                         .IsRequired();
 
                     b.Navigation("Courses");
-                });
-
-            modelBuilder.Entity("Courses.Models.Rating", b =>
-                {
-                    b.HasOne("Courses.Models.Courses", "Courses")
-                        .WithMany()
-                        .HasForeignKey("CoursescourseId")
-                        .OnDelete(DeleteBehavior.Cascade)
-                        .IsRequired();
-
-                    b.HasOne("Courses.Models.Users", "Users")
-                        .WithMany()
-                        .HasForeignKey("usersId")
-                        .OnDelete(DeleteBehavior.Cascade)
-                        .IsRequired();
-
-                    b.Navigation("Courses");
-
-                    b.Navigation("Users");
-                });
-
-            modelBuilder.Entity("Courses.Models.SubComments", b =>
-                {
-                    b.HasOne("Courses.Models.Comments", "comments")
-                        .WithMany()
-                        .HasForeignKey("CommentsId")
-                        .OnDelete(DeleteBehavior.Cascade)
-                        .IsRequired();
-
-                    b.HasOne("Courses.Models.Lessons", "lessons")
-                        .WithMany()
-                        .HasForeignKey("LessonsId")
-                        .OnDelete(DeleteBehavior.Cascade)
-                        .IsRequired();
-
-                    b.HasOne("Courses.Models.Users", "users")
-                        .WithMany()
-                        .HasForeignKey("usersId");
-
-                    b.Navigation("comments");
-
-                    b.Navigation("lessons");
-
-                    b.Navigation("users");
                 });
 
             modelBuilder.Entity("Microsoft.AspNetCore.Identity.IdentityRoleClaim<string>", b =>

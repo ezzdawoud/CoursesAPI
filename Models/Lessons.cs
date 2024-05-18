@@ -14,7 +14,9 @@ namespace Courses.Models
 
         public int courseId { get; set; }
     
-        public string URL {  get; set; }
+        public string ?URL {  get; set; }
+
+        public int lessonsNum {  get; set; }
 
 
     }

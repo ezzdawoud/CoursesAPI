@@ -7,12 +7,18 @@ namespace Courses.Models
     {
         [Key]
         public int CommentsId { get; set; }
+        public string comments {  get; set; }
        [ForeignKey("LessonsId")]
        public int LessonsId { get; set; }
+        public Lessons Lessons { get; set; }
       
-        [ForeignKey("userId")]
-        public string userId {  get; set; }
+        [ForeignKey("UsersId")]
+        public string UsersId {  get; set; }
       
         public DateTime date {  get; set; }
+        public int like {  get; set; }
+        public int dislike {  get; set; }
+        public List<SubComments> SubCommentsList { get; set; }
+
     }
 }

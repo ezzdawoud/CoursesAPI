@@ -29,10 +29,13 @@ namespace Courses.Controllers
         }
 
         // POST api/<EnrollmentController>
-        [HttpPost("Enrollment")]
-        public async Task<IActionResult> Post(string token, string id, int courseId, int CardId)
+        [HttpPost("Enrollment/{token}/{id}/{courseId}/{cardNumber}")]
+        public async Task<IActionResult> Post(string token, string id, int courseId, string cardNumber)
         {
-
+            if (!ModelState.IsValid)
+            {
+                return BadRequest(ModelState);
+            }
             Users user = await _tokenGenerator.GetUserFromToken(token);
             if (user == null)
             {
@@ -40,8 +43,8 @@ namespace Courses.Controllers
             }
             else if (user.Id == id)
             {
-                Cards Card = _context.Cards.Where(m => m.CardId == CardId).FirstOrDefault();
-                Models.Courses course = _context.Courses.Where(m => m.courseId == courseId).FirstOrDefault();
+                Cards Card = _context.Cards.FirstOrDefault(m => m.CardNumber == cardNumber);
+                Models.Courses course = _context.Courses.FirstOrDefault(m => m.courseId == courseId);
 
                 if (Card == null)
                 {
@@ -49,8 +52,7 @@ namespace Courses.Controllers
                 }
                 if (course == null)
                 {
-                    return NotFound("course Not Found");
-
+                    return NotFound("Course Not Found");
                 }
                 if (Card.CardValue >= course.CouresValue)
                 {
@@ -58,10 +60,13 @@ namespace Courses.Controllers
                     Card.userId = user.Id;
                     // Save the changes to the database
                     _context.SaveChanges();
-                    var newEnrollment = new Enrollment { CouresId = course.courseId, UserId = user.Id };
+
+                    var newEnrollment = new Enrollment { CouresId = course.courseId, UserId = user.Id, enrollmentValue = course.CouresValue,teacherId= course.UsersId };
                     _context.Enrollments.Add(newEnrollment);
                     _context.SaveChanges();
-                    return Ok("Course Buy Successfully");
+
+                    return Ok(new { message = "Course Buy Successfully" });
+
                 }
                 else
                 {
@@ -70,10 +75,10 @@ namespace Courses.Controllers
             }
             else
             {
-                return BadRequest("you dont have accsess");
+                return BadRequest("You don't have access");
             }
-
         }
+
 
         [HttpPost("get user Courses")]
         public async Task<IActionResult> Post(string token, string id)

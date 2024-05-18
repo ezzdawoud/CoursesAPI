@@ -7,13 +7,13 @@ namespace Courses.Models
     {
         [Key]
         public int EnrollmentId { get; set; }
-        [ForeignKey("userId")]
+        [ForeignKey("UserId")]
         public string UserId {  get; set; }
   
         [ForeignKey("CouresId")]
-         public int CouresId { get; set; }
-    
-
+         public int ?CouresId { get; set; }
+        public int enrollmentValue {  get; set; }
+        public string teacherId {  get; set; }
 
     }
 }

@@ -1,6 +1,7 @@
 ﻿using Courses.Data;
 using Courses.Models;
 using Microsoft.AspNetCore.Identity;
+using Microsoft.AspNetCore.WebUtilities;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.IdentityModel.Tokens;
 using System.IdentityModel.Tokens.Jwt;
@@ -40,11 +41,12 @@ namespace Courses.Helper
 
             var token = tokenHandler.CreateToken(tokenDescriptor);
             var jwtToken = tokenHandler.WriteToken(token);
+            var encodedToken = WebEncoders.Base64UrlEncode(Encoding.UTF8.GetBytes(jwtToken));
 
             // Store the token for the user
-            await StoreTokenInUser(user, jwtToken);
+            await StoreTokenInUser(user, encodedToken);
 
-            return jwtToken;
+            return encodedToken;
         }
 
         public async Task<Users> GetUserFromToken(string token)
@@ -66,9 +68,20 @@ namespace Courses.Helper
             }
         }
 
-        public async Task StoreTokenInUser(Users user, string token)
+        public async Task<bool> StoreTokenInUser(Users user, string token)
         {
-            await _userManeger.SetAuthenticationTokenAsync(user, "MyAuth", "TokenName", token);
+            var result = await _userManeger.SetAuthenticationTokenAsync(user, "MyAuth", "TokenName", token);
+
+            if (result.Succeeded)
+            {
+                // Token stored successfully
+                return true;
+            }
+            else
+            {
+                // Token storage failed
+                return false;
+            }
         }
         public async Task RemoveTokenFromUser(Users user)
         {

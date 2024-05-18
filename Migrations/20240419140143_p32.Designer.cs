@@ -4,6 +4,7 @@ using Courses.Data;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
 using Microsoft.EntityFrameworkCore.Metadata;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 
 #nullable disable
@@ -11,9 +12,10 @@ using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 namespace Courses.Migrations
 {
     [DbContext(typeof(Connections))]
-    partial class ConnectionsModelSnapshot : ModelSnapshot
+    [Migration("20240419140143_p32")]
+    partial class p32
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder
@@ -35,11 +37,9 @@ namespace Courses.Migrations
 
                     b.Property<string>("userId")
                         .IsRequired()
-                        .HasColumnType("nvarchar(450)");
+                        .HasColumnType("nvarchar(max)");
 
                     b.HasKey("CardId");
-
-                    b.HasIndex("userId");
 
                     b.ToTable("Cards");
                 });
@@ -224,21 +224,24 @@ namespace Courses.Migrations
                     b.Property<int>("CoursescourseId")
                         .HasColumnType("int");
 
+                    b.Property<string>("UsersId")
+                        .HasColumnType("nvarchar(450)");
+
                     b.Property<int>("courseId")
                         .HasColumnType("int");
 
                     b.Property<int>("rating")
                         .HasColumnType("int");
 
-                    b.Property<string>("usersId")
+                    b.Property<string>("userId")
                         .IsRequired()
-                        .HasColumnType("nvarchar(450)");
+                        .HasColumnType("nvarchar(max)");
 
                     b.HasKey("RatingId");
 
                     b.HasIndex("CoursescourseId");
 
-                    b.HasIndex("usersId");
+                    b.HasIndex("UsersId");
 
                     b.ToTable("Rating");
                 });
@@ -480,17 +483,6 @@ namespace Courses.Migrations
                     b.ToTable("AspNetUserTokens", (string)null);
                 });
 
-            modelBuilder.Entity("Courses.Models.Cards", b =>
-                {
-                    b.HasOne("Courses.Models.Users", "User")
-                        .WithMany()
-                        .HasForeignKey("userId")
-                        .OnDelete(DeleteBehavior.Cascade)
-                        .IsRequired();
-
-                    b.Navigation("User");
-                });
-
             modelBuilder.Entity("Courses.Models.Comments", b =>
                 {
                     b.HasOne("Courses.Models.Lessons", "Lessons")
@@ -572,9 +564,7 @@ namespace Courses.Migrations
 
                     b.HasOne("Courses.Models.Users", "Users")
                         .WithMany()
-                        .HasForeignKey("usersId")
-                        .OnDelete(DeleteBehavior.Cascade)
-                        .IsRequired();
+                        .HasForeignKey("UsersId");
 
                     b.Navigation("Courses");
 

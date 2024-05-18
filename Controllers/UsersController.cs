@@ -11,6 +11,10 @@ using System.IdentityModel.Tokens.Jwt;
 using System.Security.Claims;
 using System.Text;
 using Courses.Helper;
+using Microsoft.AspNetCore.WebUtilities;
+using CloudinaryDotNet.Actions;
+using CloudinaryDotNet;
+using Microsoft.EntityFrameworkCore;
 
 // For more information on enabling Web API for empty projects, visit https://go.microsoft.com/fwlink/?LinkID=397860
 
@@ -26,7 +30,9 @@ namespace Courses.Controllers
         private readonly IEmailSender _emailSender;
         private readonly IConfiguration _configuration;
         private readonly GenarateToken _tokenGenerator;
-        public UsersController(Connections conections, UserManager<Users> userManeger, SignInManager<Users> signInManeger, IConfiguration configuration,IEmailSender emailSender, GenarateToken tokenGenerator)
+        private readonly Cloudinary _cloudinary;
+
+        public UsersController(Connections conections, UserManager<Users> userManeger, SignInManager<Users> signInManeger, IConfiguration configuration,IEmailSender emailSender, GenarateToken tokenGenerator, Cloudinary cloudinary)
         {
             _context = conections;
             _userManeger = userManeger;
@@ -34,6 +40,7 @@ namespace Courses.Controllers
             _configuration = configuration;
             _emailSender = emailSender;
             _tokenGenerator = tokenGenerator;
+            _cloudinary = cloudinary;
 
 
         }
@@ -79,12 +86,13 @@ namespace Courses.Controllers
                 var roles = await _userManeger.GetRolesAsync(user);
 
                 // Create a custom object to return both message and role
+                var token = await _tokenGenerator.GenerateJwtToken(user);
                 var response = new
                 {
-                    Message = "User logged in successfully.",
-                    UserRole = roles.FirstOrDefault() // Assuming a user can have only one role
+                    Role = roles.FirstOrDefault(), // Assuming a user can have only one role
+                    usertoken= token,
+                    Id=user.Id
                 };
-                var token = await _tokenGenerator.GenerateJwtToken(user);
                 return Ok(response);
             }
             else if (result.IsLockedOut)
@@ -106,6 +114,7 @@ namespace Courses.Controllers
         public async Task<IActionResult> Logout(string token)
         {
             Users users = await _tokenGenerator.GetUserFromToken(token);
+
             // Get the currently authenticated user
 
             if (users == null)
@@ -152,31 +161,72 @@ namespace Courses.Controllers
                 // Generate an email confirmation token
                 var emailConfirmationToken = await _userManeger.GenerateEmailConfirmationTokenAsync(newUser);
 
-                // Construct the confirmation link
+                // Encode the email confirmation token
+                var encodedToken = WebEncoders.Base64UrlEncode(Encoding.UTF8.GetBytes(emailConfirmationToken));
 
-                var confirmationLink = Url.Action("ConfirmEmail", "Users", new { userId = newUser.Id, token = emailConfirmationToken }, Request.Scheme);
+                // Construct the confirmation link
+                var confirmationLink = $"http://localhost:4200/confirm-email/{newUser.Id}/{encodedToken}";
+
                 // Send confirmation email using IEmailSender
                 // Assuming you have an email sender service
                 await _emailSender.SendEmailAsync(newUser.Email, "Confirm your email", $"Please confirm your account by clicking this link: <a href='{confirmationLink}'>Confirm Email</a>");
 
                 return Ok("Registration successful. Please check your email for confirmation.");
+
             }
 
             // If registration fails, return errors
             return BadRequest(string.Join("\n", newUserResponse.Errors.Select(e => e.Description)));
         }
 
+        [HttpPost("upload user pictures/{id}/{token}")]
+        public async Task<IActionResult> uploadUserImage(string id, string token, IFormFile file)
+        {
+            Users user = await _tokenGenerator.GetUserFromToken(token);
+            if (user == null)
+            {
+                return NotFound("User not found!");
+            }
+
+            if (user.Id != id)
+            {
+                return BadRequest("You don't have access");
+            }
+            if (file == null || file.Length == 0)
+                return BadRequest("No file uploaded.");
+
+            // Upload image to Cloudinary
+            var uploadParams = new ImageUploadParams()
+            {
+                File = new FileDescription(file.FileName, file.OpenReadStream())
+            };
+
+            var uploadResult = await _cloudinary.UploadAsync(uploadParams);
+
+            // Assuming you're using Entity Framework Core, retrieve the course from the database
+
+            // Update the Pictures property of the course with the URL of the uploaded image
+            var users = await _context.Users.Where(m => m.Id == id).FirstOrDefaultAsync();
+            users.UsersPictrues = uploadResult.SecureUri.ToString();
+
+            // Save changes to the database
+            await _context.SaveChangesAsync();
+            return Ok(uploadResult);
+        }
 
 
-        [HttpGet]
+
+
+        [HttpPost("confirmemail/{userId}/{token}")]
         [AllowAnonymous]
-        [Route("api/confirmemail")]
         public async Task<IActionResult> ConfirmEmail(string userId, string token)
         {
             if (userId == null || token == null)
             {
                 return BadRequest("Invalid token or user ID.");
             }
+            var decodedTokenBytes = WebEncoders.Base64UrlDecode(token);
+            var decodedToken = Encoding.UTF8.GetString(decodedTokenBytes);
 
             var user = await _userManeger.FindByIdAsync(userId);
             if (user == null)
@@ -184,7 +234,7 @@ namespace Courses.Controllers
                 return BadRequest("User not found.");
             }
 
-            var result = await _userManeger.ConfirmEmailAsync(user, token);
+            var result = await _userManeger.ConfirmEmailAsync(user, decodedToken);
 
             if (result.Succeeded)
             {
@@ -194,8 +244,107 @@ namespace Courses.Controllers
             {
                 return BadRequest("Error confirming email.");
             }
+
         }
 
-       
+        [HttpPost("getUserRole/{id}/{token}")]
+        public async Task<IActionResult> getUserRole(string id, string token)
+        {
+            Users user = await _tokenGenerator.GetUserFromToken(token);
+            if (user == null)
+            {
+                return NotFound("User not found!");
+            }
+
+            if (user.Id != id)
+            {
+                return BadRequest("You don't have access");
+            }
+
+            // Await the GetRolesAsync method to get the actual list of roles
+            var roles = await _userManeger.GetRolesAsync(user);
+
+            return Ok(roles);
+        }
+
+        [HttpPost("getUserData/{id}/{token}")]
+        public async Task<IActionResult> getUserInformation(string id, string token)
+        {
+            Users user = await _tokenGenerator.GetUserFromToken(token);
+            if (user == null)
+            {
+                return NotFound("User not found!");
+            }
+
+            if (user.Id != id)
+            {
+                return BadRequest("You don't have access");
+            }
+           UserSTO userData=new UserSTO()
+           {
+               UserName = user.UserName,
+               PhoneNumber=user.PhoneNumber,
+               UsersPictrues=user.UsersPictrues,
+               userEmail=user.Email,
+           };
+
+            return Ok(userData);
+          
+
+        }
+
+        [HttpPost("update user data/{id}/{token}/{name}/{number}")]
+        public async Task<IActionResult> UpdateUserData(string id, string token, string name, string number)
+        {
+            try
+            {
+                Users user = await _tokenGenerator.GetUserFromToken(token);
+                if (user == null)
+                {
+                    return NotFound("User not found!");
+                }
+
+                if (user.Id != id)
+                {
+                    return BadRequest("You don't have access");
+                }
+                else
+                {
+                    var oldUser = _context.Users.FirstOrDefault(u => u.Id == id);
+                    if (oldUser == null)
+                    {
+                        return NotFound("User not found!");
+                    }
+
+                    oldUser.UserName = name;
+                    oldUser.PhoneNumber = number;
+                    await _context.SaveChangesAsync(); // Save changes asynchronously
+
+                    return Ok("User data updated successfully");
+                }
+            }
+            catch (Exception ex)
+            {
+                return StatusCode(500, "An error occurred while updating user data");
+            }
+        }
+
+
+
+
+        public class UserSTO
+        {
+            public string UserName { get; set; }
+            public string PhoneNumber { get; set; }
+            public string UsersPictrues { get; set; }
+            public string userEmail { get; set; }
+        }
+
+
+
+
+
+
+
     }
 }

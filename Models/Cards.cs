@@ -8,10 +8,12 @@ namespace Courses.Models
     {
         [Key]
         public int CardId { get; set; }
-        public int CardValue { get; set; }
-        [ForeignKey("User")]
-         public string ?userId {  get; set; }
+        public string CardNumber { get; set; }
 
+        public int CardValue { get; set; }
+
+        [ForeignKey("userId")]
+        public string ?userId { get; set; } // Nullable string for userId
 
     }
 }
