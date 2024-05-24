@@ -1,4 +1,5 @@
 ﻿using Courses.Models;
+using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.Identity.EntityFrameworkCore;
 using Microsoft.Data.SqlClient;
 using Microsoft.EntityFrameworkCore;
@@ -7,7 +8,7 @@ using System.Data;
 
 namespace Courses.Data
 {
-    public class Connections : IdentityDbContext<Users>
+    public class Connections : IdentityDbContext<Users, IdentityRole, string>
     {
         public new DbSet<Users> Users { get; set; } // Hide the original Users property
         public DbSet<Cards> Cards { get; set; }
@@ -18,6 +19,7 @@ namespace Courses.Data
         public DbSet<SubComments> SubComments { get; set; }
         public DbSet<Contact> Contacts { get; set; }
         public DbSet<Rating> Rating { get; set; }
+        public DbSet<Reactions> Reactions { get; set; }
 
         public int GetEnrollmentCountForTeacher(string teacherId)
         {
@@ -39,11 +41,17 @@ namespace Courses.Data
 
             return (int)totalValueParam.Value;
         }
+        protected override void OnModelCreating(ModelBuilder modelBuilder)
+        {
+            base.OnModelCreating(modelBuilder);
+
+            modelBuilder.Ignore<IdentityUserLogin<string>>(); // Exclude IdentityUserLogin<string> entity
+            modelBuilder.Entity<Reactions>()
+                .HasKey(r => r.reactionId);
+        }
         public Connections(DbContextOptions<Connections> options)
-       : base(options)
+            : base(options)
         {
         }
-
-
     }
 }

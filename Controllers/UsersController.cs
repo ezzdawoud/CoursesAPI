@@ -15,7 +15,11 @@ using Microsoft.AspNetCore.WebUtilities;
 using CloudinaryDotNet.Actions;
 using CloudinaryDotNet;
 using Microsoft.EntityFrameworkCore;
-
+using Microsoft.AspNetCore.Identity;
+using Microsoft.AspNetCore.WebUtilities;
+using System.Text;
+using System.Threading.Tasks;
+using NuGet.Common;
 // For more information on enabling Web API for empty projects, visit https://go.microsoft.com/fwlink/?LinkID=397860
 
 namespace Courses.Controllers
@@ -247,6 +251,122 @@ namespace Courses.Controllers
 
         }
 
+        [HttpPost("requestEmailChange/{oldEmail}")]
+        public async Task<IActionResult> RequestEmailChange(string oldEmail)
+        {
+            var user = await _userManeger.FindByEmailAsync(oldEmail);
+            if (user == null)
+            {
+                return NotFound("User not found.");
+            }
+
+            var emailChangeToken = await _userManeger.GenerateUserTokenAsync(user, TokenOptions.DefaultProvider, "ChangeEmail");
+            var encodedToken = WebEncoders.Base64UrlEncode(Encoding.UTF8.GetBytes(emailChangeToken));
+            var confirmationLink = $"http://localhost:4200/changeEmail?token={encodedToken}&email={oldEmail}";
+
+            await _emailSender.SendEmailAsync(oldEmail, "Confirm your email change", $"Please confirm your email change by clicking this link: <a href='{confirmationLink}'>Confirm Email Change</a>");
+
+            return Ok(new { message = "\"Confirmation link has been sent to your email.\""});
+
+        }
+        [HttpPost("verify-email-change-token")]
+        public async Task<IActionResult> VerifyEmailChangeToken([FromBody] VerifyEmailChangeTokenModel model)
+        {
+            var user = await _userManeger.FindByEmailAsync(model.Email);
+            if (user == null)
+            {
+                return NotFound("User not found");
+            }
+
+            var decodedToken = Encoding.UTF8.GetString(WebEncoders.Base64UrlDecode(model.Token));
+            var isValid = await _userManeger.VerifyUserTokenAsync(user, TokenOptions.DefaultProvider, "ChangeEmail", decodedToken);
+            if (!isValid)
+            {
+                return BadRequest("Invalid or expired token");
+            }
+
+            return Ok(new { message = "Token is valid" });
+        }
+
+
+        [HttpPost("change-email")]
+        public async Task<IActionResult> ChangeEmail([FromBody] ChangeEmailModel model)
+        {
+            // Decode the token
+            var decodedTokenBytes = WebEncoders.Base64UrlDecode(model.Token);
+            var decodedToken = Encoding.UTF8.GetString(decodedTokenBytes);
+
+            // Find the user associated with the token
+            var user = await _userManeger.FindByEmailAsync(model.Email);
+            if (user == null)
+            {
+                return NotFound("User not found.");
+            }
+            var Email=await _userManeger.FindByEmailAsync(model.NewEmail);
+            if (Email != null)
+            {
+                return BadRequest("email alardy used");
+            }
+            // Verify the email change token
+            var tokenValid = await _userManeger.VerifyUserTokenAsync(user, _userManeger.Options.Tokens.EmailConfirmationTokenProvider, "ChangeEmail", decodedToken);
+            if (!tokenValid)
+            {
+                return BadRequest("Invalid token.");
+            }
+
+            // Generate the email confirmation token for the new email
+            var newEmailToken = await _userManeger.GenerateChangeEmailTokenAsync(user, model.NewEmail);
+
+            // Encode the new email confirmation token
+            var encodedNewEmailToken = WebEncoders.Base64UrlEncode(Encoding.UTF8.GetBytes(newEmailToken));
+
+            // Construct the email confirmation link
+            var confirmationLink = $"http://localhost:4200/confirm-new-email/{user.Id}/{encodedNewEmailToken}/{model.NewEmail}";
+
+            // Send confirmation email to the new email address
+            await _emailSender.SendEmailAsync(model.NewEmail, "Confirm your new email", $"Please confirm your new email by clicking this link: <a href='{confirmationLink}'>Confirm New Email</a>");
+            return Ok(new { message = "Please check your new email to confirm the change"});
+
+        }
+
+        [HttpPost("confirm-new-email/{userId}/{token}/{newEmail}")]
+        public async Task<IActionResult> ConfirmNewEmail(string userId, string token, string newEmail)
+        {
+            var user = await _userManeger.FindByIdAsync(userId);
+            if (user == null)
+            {
+                return NotFound("User not found.");
+            }
+
+            // Decode the token
+            var decodedTokenBytes = WebEncoders.Base64UrlDecode(token);
+            var decodedToken = Encoding.UTF8.GetString(decodedTokenBytes);
+
+            // Confirm the email change
+            var result = await _userManeger.ChangeEmailAsync(user, newEmail, decodedToken);
+
+            if (result.Succeeded)
+            {
+                return Ok(new { message = "Email address has been changed successfully." });
+
+            }
+
+            return BadRequest("Error changing email address.");
+        }
+
+        public class VerifyEmailChangeTokenModel
+        {
+            public string Email { get; set; }
+            public string Token { get; set; }
+        }
+
+        public class ChangeEmailModel
+        {
+            public string Email { get; set; }
+            public string Token { get; set; }
+            public string NewEmail { get; set; }
+        }
+
         [HttpPost("getUserRole/{id}/{token}")]
         public async Task<IActionResult> getUserRole(string id, string token)
         {
@@ -296,6 +416,11 @@ namespace Courses.Controllers
         [HttpPost("update user data/{id}/{token}/{name}/{number}")]
         public async Task<IActionResult> UpdateUserData(string id, string token, string name, string number)
         {
+            // Validate input parameters
+            if (string.IsNullOrEmpty(id) || string.IsNullOrEmpty(token) || string.IsNullOrEmpty(name))
+            {
+                return BadRequest("Invalid input parameters");
+            }
             try
             {
                 Users user = await _tokenGenerator.GetUserFromToken(token);
@@ -303,7 +428,11 @@ namespace Courses.Controllers
                 {
                     return NotFound("User not found!");
                 }
-
+                var users=_context.Users.Where(m=>m.UserName==name).FirstOrDefault();
+                if (users != null)
+                {
+                    return BadRequest((new { message = " user name alaredy used." }));
+                }
                 if (user.Id != id)
                 {
                     return BadRequest("You don't have access");
@@ -315,12 +444,12 @@ namespace Courses.Controllers
                     {
                         return NotFound("User not found!");
                     }
-
+                    
                     oldUser.UserName = name;
                     oldUser.PhoneNumber = number;
                     await _context.SaveChangesAsync(); // Save changes asynchronously
 
-                    return Ok("User data updated successfully");
+                    return Ok((new { message = " updated successfully." }));
                 }
             }
             catch (Exception ex)

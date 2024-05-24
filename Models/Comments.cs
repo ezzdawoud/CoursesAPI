@@ -15,10 +15,10 @@ namespace Courses.Models
         [ForeignKey("UsersId")]
         public string UsersId {  get; set; }
       
-        public DateTime date {  get; set; }
+        public DateTime date {  get; set; } = DateTime.Now;
         public int like {  get; set; }
         public int dislike {  get; set; }
-        public List<SubComments> SubCommentsList { get; set; }
+        public List<SubComments>?SubCommentsList { get; set; }
 
     }
 }

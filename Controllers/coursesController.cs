@@ -273,8 +273,6 @@ namespace Courses.Controllers
         public async Task<ActionResult<Models.Courses>> getCourse(int courseId)
         {
            
-
-
             var course = await _context.Courses.FirstOrDefaultAsync(m => m.courseId == courseId);
             if (course == null)
             {
