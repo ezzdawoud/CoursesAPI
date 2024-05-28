@@ -50,12 +50,16 @@ namespace Courses.Controllers
         }
 
         // GET: api/<UsersController>
-        [HttpGet]
-        public async Task<IActionResult> Get(string token)
+        [HttpGet("get all users/{token}/{userId}")]
+        public async Task<IActionResult> Get(string token,string userId)
         {
             Users user = await _tokenGenerator.GetUserFromToken(token);
             if(user == null) { 
             return BadRequest("the token is not valid !");    
+            }
+            if(user.Id != userId)
+            {
+                return BadRequest("");
             }
             var roles = await _userManeger.GetRolesAsync(user);
             if (roles.FirstOrDefault() == "admin") {
@@ -458,6 +462,76 @@ namespace Courses.Controllers
             }
         }
 
+        [HttpPost("request-password-change")]
+        public async Task<IActionResult> RequestPasswordChange([FromBody] RequestPasswordChangeModel model)
+        {
+            var user = await _userManeger.FindByEmailAsync(model.Email);
+            if (user == null)
+            {
+                return NotFound("User not found");
+            }
+
+            var token = await _userManeger.GeneratePasswordResetTokenAsync(user);
+            var encodedToken = WebEncoders.Base64UrlEncode(Encoding.UTF8.GetBytes(token));
+
+            var confirmationLink = $"http://localhost:4200/changePassword/{encodedToken}/{user.Email}";
+            await _emailSender.SendEmailAsync(user.Email, "Confirm Password Change", $"Please confirm your password change by clicking this link: <a href='{confirmationLink}'>Confirm Password Change</a>");
+
+            return Ok(new { message = "Password change request initiated. Please check your email for confirmation." });
+        }
+        public class RequestPasswordChangeModel
+        {
+            public string Email { get; set; }
+        }
+
+        [HttpPost("confirm-password-change-token")]
+        public async Task<IActionResult> ConfirmPasswordChangeToken([FromBody] ConfirmPasswordChangeTokenModel model)
+        {
+            var decodedToken = Encoding.UTF8.GetString(WebEncoders.Base64UrlDecode(model.Token));
+            var user = await _userManeger.FindByEmailAsync(model.Email);
+            if (user == null)
+            {
+                return NotFound("User not found");
+            }
+
+            var isValid = await _userManeger.VerifyUserTokenAsync(user, "Default", "ResetPassword", decodedToken);
+            if (!isValid)
+            {
+                return BadRequest("Invalid or expired token");
+            }
+
+            return Ok(new { message = "Token is valid" });
+        }
+        public class ConfirmPasswordChangeTokenModel
+        {
+            public string Email { get; set; }
+            public string Token { get; set; }
+        }
+        public class ResetPasswordModel
+        {
+            public string Email { get; set; }
+            public string Token { get; set; }
+            public string NewPassword { get; set; }
+        }
+
+        [HttpPost("reset-password")]
+        public async Task<IActionResult> ResetPassword([FromBody] ResetPasswordModel model)
+        {
+            var decodedToken = Encoding.UTF8.GetString(WebEncoders.Base64UrlDecode(model.Token));
+            var user = await _userManeger.FindByEmailAsync(model.Email);
+            if (user == null)
+            {
+                return NotFound("User not found");
+            }
+
+            var result = await _userManeger.ResetPasswordAsync(user, decodedToken, model.NewPassword);
+            if (!result.Succeeded)
+            {
+                return BadRequest(result.Errors);
+            }
+
+            return Ok(new { message = "Password changed successfully" });
+        }
 
 
 
