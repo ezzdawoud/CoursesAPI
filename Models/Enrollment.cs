@@ -14,6 +14,8 @@ namespace Courses.Models
          public int ?CouresId { get; set; }
         public int enrollmentValue {  get; set; }
         public string teacherId {  get; set; }
+        public DateTime EnrollmentDate { get; set; } // Added date property
+
 
     }
 }

@@ -3,23 +3,22 @@ using Courses.Data;
 using Courses.Helper;
 using Courses.Models;
 using Courses.Services;
-using Microsoft.AspNetCore.Identity;
-using Microsoft.AspNetCore.Identity.UI.Services;
-using Microsoft.EntityFrameworkCore;
-using Microsoft.OpenApi.Models;
-using SendGrid.Extensions.DependencyInjection;
-using Microsoft.Extensions.Configuration;
+using Microsoft.AspNetCore.Builder;
+using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Http.Features;
+using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Configuration;
+using Microsoft.Extensions.DependencyInjection;
 using Microsoft.AspNetCore.Server.Kestrel.Core;
+using Microsoft.AspNetCore.Identity.UI.Services;
+using Microsoft.AspNetCore.Identity;
+using SendGrid.Extensions.DependencyInjection;
+using Microsoft.OpenApi.Models;
 
 var builder = WebApplication.CreateBuilder(args);
 
 // Add services to the container
 builder.Services.AddControllers();
-
-// Learn more about configuring Swagger/OpenAPI at https://aka.ms/aspnetcore/swashbuckle
-builder.Services.AddEndpointsApiExplorer();
-builder.Services.AddSwaggerGen();
 
 // Configure CORS
 builder.Services.AddCors(options =>
@@ -27,9 +26,9 @@ builder.Services.AddCors(options =>
     options.AddPolicy("AllowLocalhost4200",
         builder =>
         {
-            builder.WithOrigins("http://localhost:4200")
+            builder.WithOrigins("http://localhost:4200", "https://coursesv3.vercel.app")
                    .AllowAnyHeader()
-                   .AllowAnyMethod();
+                   .AllowAnyMethod().AllowAnyOrigin();
         });
 });
 
@@ -102,19 +101,40 @@ builder.Services.AddSingleton<Cloudinary>(provider =>
     ));
 });
 
-var app = builder.Build();
+// Add Swagger services
+builder.Services.AddSwaggerGen(c =>
+{
+    c.SwaggerDoc("v1", new OpenApiInfo
+    {
+        Version = "v1",
+        Title = "My API",
+        Description = "A simple example ASP.NET Core Web API",
+    });
+});
 
-// Seed initial data if necessary
-//Seed.SeedUsersAndRoles(app);
+var app = builder.Build();
 
 // Enable CORS
 app.UseCors("AllowLocalhost4200");
 
+// Seed initial data if necessary
+//Seed.SeedUsersAndRoles(app);
+
 // Configure the HTTP request pipeline
 if (app.Environment.IsDevelopment())
 {
+    app.UseDeveloperExceptionPage();
+
+    // Enable middleware to serve generated Swagger as a JSON endpoint.
     app.UseSwagger();
-    app.UseSwaggerUI();
+
+    // Enable middleware to serve swagger-ui (HTML, JS, CSS, etc.),
+    // specifying the Swagger JSON endpoint.
+    app.UseSwaggerUI(c =>
+    {
+        c.SwaggerEndpoint("/swagger/v1/swagger.json", "My API V1");
+        c.RoutePrefix = "swagger"; // Set Swagger UI at the app's root
+    });
 }
 
 app.UseHttpsRedirection();

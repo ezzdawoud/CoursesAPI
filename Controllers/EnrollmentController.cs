@@ -5,6 +5,7 @@ using Microsoft.AspNetCore.Identity.UI.Services;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
+using static Courses.Controllers.EnrollmentController;
 
 // For more information on enabling Web API for empty projects, visit https://go.microsoft.com/fwlink/?LinkID=397860
 
@@ -29,22 +30,32 @@ namespace Courses.Controllers
         }
 
         // POST api/<EnrollmentController>
-        [HttpPost("Enrollment/{token}/{id}/{courseId}/{cardNumber}")]
-        public async Task<IActionResult> Post(string token, string id, int courseId, string cardNumber)
+        public class enrollment
+        {
+            public string token { get; set; }
+            public string id { get; set; }
+            public int courseId {  get; set; }
+            public string cardNumber {  get; set; }
+            public DateTime ?EnrollmentDate { get; set; } 
+
+        }
+
+        [HttpPost("Enrollment")]
+        public async Task<IActionResult> Post([FromBody]enrollment enrollment)
         {
             if (!ModelState.IsValid)
             {
                 return BadRequest(ModelState);
             }
-            Users user = await _tokenGenerator.GetUserFromToken(token);
+            Users user = await _tokenGenerator.GetUserFromToken(enrollment.token);
             if (user == null)
             {
                 return NotFound("User Not Found");
             }
-            else if (user.Id == id)
+            else if (user.Id == enrollment.id)
             {
-                Cards Card = _context.Cards.FirstOrDefault(m => m.CardNumber == cardNumber);
-                Models.Courses course = _context.Courses.FirstOrDefault(m => m.courseId == courseId);
+                Cards Card = _context.Cards.FirstOrDefault(m => m.CardNumber == enrollment.cardNumber);
+                Models.Courses course = _context.Courses.FirstOrDefault(m => m.courseId == enrollment.courseId);
 
                 if (Card == null)
                 {
@@ -61,7 +72,7 @@ namespace Courses.Controllers
                     // Save the changes to the database
                     _context.SaveChanges();
 
-                    var newEnrollment = new Enrollment { CouresId = course.courseId, UserId = user.Id, enrollmentValue = course.CouresValue,teacherId= course.UsersId };
+                    var newEnrollment = new Enrollment { CouresId = course.courseId, UserId = user.Id, enrollmentValue = course.CouresValue,teacherId= course.UsersId,EnrollmentDate= DateTime.Now };
                     _context.Enrollments.Add(newEnrollment);
                     _context.SaveChanges();
 

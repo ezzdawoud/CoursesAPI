@@ -7,6 +7,7 @@ using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using System.Runtime.Intrinsics.Arm;
+using static Courses.Controllers.lessonsController;
 
 // For more information on enabling Web API for empty projects, visit https://go.microsoft.com/fwlink/?LinkID=397860
 
@@ -27,16 +28,16 @@ namespace Courses.Controllers
             _tokenGenerator = tokenGenerator;
             _cloudinary = cloudinary;
         }
-
-        [HttpPost("insert lessons/{token}/{userId}")]
-        public async Task<ActionResult<string>> insetLessons(string token, string userId, Lessons lessons)
+        
+        [HttpPost("insert lessons")]
+        public async Task<ActionResult<string>> insetLessons([FromForm] lessonsuserData data,[FromForm]  Lessons lessons)
         {
-            Users user = await _tokenGenerator.GetUserFromToken(token);
+            Users user = await _tokenGenerator.GetUserFromToken(data.Token);
             if (user == null)
             {
                 return NotFound();
             }
-            else if (user.Id == userId)
+            else if (user.Id == data.userId)
             {
                 var course = _context.Courses.Where(m => m.courseId == lessons.courseId).FirstOrDefault();
                 if (course == null)
@@ -53,7 +54,8 @@ namespace Courses.Controllers
                     };
                     await _context.Lessons.AddAsync(newLessons);
                     _context.SaveChanges();
-                    return Ok();
+                   
+                    return Ok(newLessons);
                 }
                 else
                 {
@@ -66,31 +68,39 @@ namespace Courses.Controllers
             }
         }
 
-        [HttpPost("upload video")]
-        public async Task<IActionResult> UploadVideo(int courseId, int lessonsId, string id, string token, IFormFile file)
+        public class insertVideo
         {
-            Users user = await _tokenGenerator.GetUserFromToken(token);
+            public int courseId { get; set; }
+            public int lessonsId { get; set; }
+            public string id {  get; set; }
+            public string token {  get; set; }
+        }
+
+        [HttpPost("upload video")]
+        public async Task<IActionResult> UploadVideo([FromForm]insertVideo data,[FromForm] IFormFile file)
+        {
+            Users user = await _tokenGenerator.GetUserFromToken(data.token);
             if (user == null)
             {
                 return NotFound();
             }
-            if (user.Id != id)
+            if (user.Id != data.id)
             {
                 return BadRequest();
             }
-            var course = await _context.Courses.FindAsync(courseId);
+            var course = await _context.Courses.FindAsync(data.courseId);
             if (course == null)
             {
                 return BadRequest("Invalid course ID.");
             }
 
-            var lessons = await _context.Lessons.FindAsync(lessonsId);
+            var lessons = await _context.Lessons.FindAsync(data.lessonsId);
             if (lessons == null)
             {
                 return BadRequest("Invalid lesson ID.");
             }
 
-            if (user.Id != id || user.Id != course.UsersId)
+            if (user.Id != data.id || user.Id != course.UsersId)
             {
                 return BadRequest("User does not have permission to upload video.");
             }
@@ -124,22 +134,28 @@ namespace Courses.Controllers
                 return StatusCode(500, $"An error occurred: {ex.Message}");
             }
         }
-
-        [HttpPost("getlessons/{courseId}/{lessonsNumber}/{id}/{token}")]
-        public async Task<IActionResult> GetLessons(int courseId, int lessonsNumber, string id, string token)
+        public class GetLesson
         {
-            Users user = await _tokenGenerator.GetUserFromToken(token);
+            public int courseId { get; set; }
+            public int lessonsNumber { get; set; }
+            public string id { get; set; }
+            public string token { get; set; }
+        }
+        [HttpPost("getlessons")]
+        public async Task<IActionResult> GetLessons([FromBody] GetLesson get)
+        {
+            Users user = await _tokenGenerator.GetUserFromToken(get.token);
             if (user == null)
             {
                 return NotFound();
             }
-            if (user.Id != id)
+            if (user.Id != get.id)
             {
                 return BadRequest();
             }
 
             var lesson = await _context.Lessons
-                .FirstOrDefaultAsync(m => m.lessonsNum == lessonsNumber && m.courseId == courseId);
+                .FirstOrDefaultAsync(m => m.lessonsNum == get.lessonsNumber && m.courseId == get.courseId);
 
             if (lesson == null)
             {
@@ -147,7 +163,7 @@ namespace Courses.Controllers
             }
 
             // Fetch teacher name
-            var course = await _context.Courses.FirstOrDefaultAsync(m => m.courseId == courseId);
+            var course = await _context.Courses.FirstOrDefaultAsync(m => m.courseId == get.courseId);
 
             var teacherInfo = await _context.Users
      .Where(u => u.Id == course.UsersId)
@@ -163,7 +179,7 @@ namespace Courses.Controllers
                 var teacherName = teacherInfo.UserName;
                 var teacherPicture = teacherInfo.Picture;
             }
-            var AllLessons = _context.Lessons.Where(m => m.courseId == courseId).ToList();
+            var AllLessons = _context.Lessons.Where(m => m.courseId == get.courseId).ToList();
             // Fetch comments specific to the lesson
 
 
@@ -187,32 +203,34 @@ namespace Courses.Controllers
                 },
                 courseLessons = AllLessons,
                 teacherInfoApi = teacherInfo,
-                courseName = _context.Courses.Where(m => m.courseId == courseId).FirstOrDefault().CouresName,
+                courseName = _context.Courses.Where(m => m.courseId == get.courseId).FirstOrDefault().CouresName,
             };
 
             return Ok(response);
         }
 
-        public class userData {
-            public string userName { get; set; }
-            public string pictrue { get; set; }
+        public class lessonsuserData {
+            public string userId { get; set; }
+            public string Token { get; set; }
         }
 
-        [HttpPost("get lessons comment/{courseId}/{lessonsNumber}/{id}/{token}")]
-        public async Task<IActionResult> GetComments(int courseId, int lessonsNumber, string id, string token)
+       
+
+        [HttpPost("get lessons comment")]
+        public async Task<IActionResult> GetComments([FromBody] GetLesson get)
         {
-            Users user = await _tokenGenerator.GetUserFromToken(token);
+            Users user = await _tokenGenerator.GetUserFromToken(get.token);
             if (user == null)
             {
                 return NotFound();
             }
-            if (user.Id != id)
+            if (user.Id != get.id)
             {
                 return BadRequest();
             }
 
             var lesson = await _context.Lessons
-                .FirstOrDefaultAsync(m => m.lessonsNum == lessonsNumber && m.courseId == courseId);
+                .FirstOrDefaultAsync(m => m.lessonsNum == get.lessonsNumber && m.courseId == get.courseId);
 
             if (lesson == null)
             {
@@ -220,7 +238,7 @@ namespace Courses.Controllers
             }
 
             // Fetch teacher name
-            var course = await _context.Courses.FirstOrDefaultAsync(m => m.courseId == courseId);
+            var course = await _context.Courses.FirstOrDefaultAsync(m => m.courseId == get.courseId);
 
             var comments = await _context.Comments
 .Where(c => c.LessonsId == lesson.LessonsId)
@@ -240,8 +258,8 @@ user => user.Id,
         comment.date,
         comment.like,
         comment.dislike,
-        isLiked = _context.Reactions.Any(m => m.userId == id && m.commentId == comment.CommentsId && m.reaction == true),
-        isDisliked = _context.Reactions.Any(m => m.userId == id && m.commentId == comment.CommentsId && m.reaction == false),
+        isLiked = _context.Reactions.Any(m => m.userId == get.id && m.commentId == comment.CommentsId && m.reaction == true),
+        isDisliked = _context.Reactions.Any(m => m.userId == get.id && m.commentId == comment.CommentsId && m.reaction == false),
         SubComments = _context.SubComments
          .Where(sc => sc.CommentsId == comment.CommentsId)
          .Select(sc => new
@@ -250,8 +268,8 @@ user => user.Id,
              sc.subComments,
              sc.like,
              sc.dislike,
-             isLiked = _context.Reactions.Any(m => m.userId == id && m.SubCommentsId == sc.SubCommentsId && m.reaction == true),
-             isDisliked = _context.Reactions.Any(m => m.userId == id && m.SubCommentsId == sc.SubCommentsId && m.reaction == false),
+             isLiked = _context.Reactions.Any(m => m.userId == get.id && m.SubCommentsId == sc.SubCommentsId && m.reaction == true),
+             isDisliked = _context.Reactions.Any(m => m.userId == get.id && m.SubCommentsId == sc.SubCommentsId && m.reaction == false),
              username = _context.Users.Where(m => m.Id == sc.userId).FirstOrDefault()!.UserName,
              picutres = _context.Users.Where(m => m.Id == sc.userId).FirstOrDefault()!.UsersPictrues,
              userId = _context.Users.Where(m => m.Id == sc.userId).FirstOrDefault()!.Id,
@@ -264,28 +282,36 @@ user => user.Id,
             return Ok(comments);
 
         }
-        [HttpPost("Add comments/{courseId}/{lessonsNumber}/{id}/{token}/{comments}")]
-        public async Task<IActionResult> AddComments(int courseId, int lessonsNumber, string id, string token, string comments)
+        public class addcomments
         {
-            Users user = await _tokenGenerator.GetUserFromToken(token);
+            public int courseId { get; set; }
+            public int lessonsNumber {  get; set; }
+            public string id {  get; set; }
+            public string token {  get; set; }
+            public string comments {  get; set; }
+        }
+        [HttpPost("Add comments")]
+        public async Task<IActionResult> AddComments([FromBody] addcomments addcomments)
+        {
+            Users user = await _tokenGenerator.GetUserFromToken(addcomments.token);
             if (user == null)
             {
                 return NotFound();
             }
-            if (user.Id != id)
+            if (user.Id != addcomments.id)
             {
                 return BadRequest();
             }
 
             var lesson = await _context.Lessons
-                .FirstOrDefaultAsync(m => m.lessonsNum == lessonsNumber && m.courseId == courseId);
+                .FirstOrDefaultAsync(m => m.lessonsNum == addcomments.lessonsNumber && m.courseId == addcomments.courseId);
             if (lesson == null)
             {
                 return NotFound();
             }
             var newComment = new Comments
             {
-                comments = comments,
+                comments = addcomments.comments,
                 LessonsId = lesson.LessonsId,
                 UsersId = user.Id,
                 date = DateTime.Now,
@@ -313,8 +339,8 @@ user => user.Id,
                                 comment.date,
                                 comment.like,
                                 comment.dislike,
-                                isLiked = _context.Reactions.Any(m => m.userId == id && m.commentId == comment.CommentsId && m.reaction == true),
-                                isDisliked = _context.Reactions.Any(m => m.userId == id && m.commentId == comment.CommentsId && m.reaction == false),
+                                isLiked = _context.Reactions.Any(m => m.userId == addcomments.id && m.commentId == comment.CommentsId && m.reaction == true),
+                                isDisliked = _context.Reactions.Any(m => m.userId == addcomments.id && m.commentId == comment.CommentsId && m.reaction == false),
                                 SubComments = _context.SubComments
                                     .Where(sc => sc.CommentsId == comment.CommentsId)
                                     .Select(sc => new
@@ -323,8 +349,8 @@ user => user.Id,
                                         sc.subComments,
                                         sc.like,
                                         sc.dislike,
-                                        isLiked = _context.Reactions.Any(m => m.userId == id && m.SubCommentsId == sc.SubCommentsId && m.reaction == true),
-                                        isDisliked = _context.Reactions.Any(m => m.userId == id && m.SubCommentsId == sc.SubCommentsId && m.reaction == false),
+                                        isLiked = _context.Reactions.Any(m => m.userId == addcomments.id && m.SubCommentsId == sc.SubCommentsId && m.reaction == true),
+                                        isDisliked = _context.Reactions.Any(m => m.userId == addcomments.id && m.SubCommentsId == sc.SubCommentsId && m.reaction == false),
                                         username = _context.Users.Where(m => m.Id == sc.userId).FirstOrDefault()!.UserName,
                                         pictures = _context.Users.Where(m => m.Id == sc.userId).FirstOrDefault()!.UsersPictrues,
                                     })
@@ -336,25 +362,36 @@ user => user.Id,
             return Ok(addedComment);
 
         }
-        [HttpPost("add Sub comment/{courseId}/{lessonsNumber}/{id}/{token}/{commentId}/{comments}")]
-        public async Task<IActionResult> AddSubComments(int courseId, int lessonsNumber, string id, string token,int commentId, string comments)
+
+        public class addSubComment
         {
-            Users user = await _tokenGenerator.GetUserFromToken(token);
+            public int courseId { get; set; }
+            public int lessonsNumber {  get; set; }
+            public string id {  get; set; }
+            public string token {  get; set; }
+            public int commentId {  get; set; }
+            public string comments { get; set; }
+        }
+
+        [HttpPost("add Sub comment")]
+        public async Task<IActionResult> AddSubComments([FromBody] addSubComment add)
+        {
+            Users user = await _tokenGenerator.GetUserFromToken(add.token);
             if (user == null)
             {
                 return NotFound();
             }
-            if (user.Id != id)
+            if (user.Id != add.id)
             {
                 return BadRequest();
             }
             var lesson = await _context.Lessons
-                .FirstOrDefaultAsync(m => m.lessonsNum == lessonsNumber && m.courseId == courseId);
+                .FirstOrDefaultAsync(m => m.lessonsNum == add.lessonsNumber && m.courseId == add.courseId);
             if (lesson == null)
             {
                 return NotFound();
             }
-            var comment=_context.Comments.Where(m=>m.CommentsId == commentId).FirstOrDefault();
+            var comment=_context.Comments.Where(m=>m.CommentsId == add.commentId).FirstOrDefault();
             if (comment == null)
             {
                 return BadRequest();
@@ -362,10 +399,10 @@ user => user.Id,
 
             var newComment = new SubComments
             {
-                CommentsId = commentId,
+                CommentsId = add.commentId,
                 LessonsId = lesson.LessonsId,
                 userId = user.Id,
-                subComments=comments,
+                subComments= add.comments,
                 like = 0,
                 dislike = 0
                 
@@ -380,8 +417,8 @@ user => user.Id,
                             sc.subComments,
                             sc.like,
                             sc.dislike,
-                            isLiked = _context.Reactions.Any(m => m.userId == id && m.SubCommentsId == sc.SubCommentsId && m.reaction == true),
-                            isDisliked = _context.Reactions.Any(m => m.userId == id && m.SubCommentsId == sc.SubCommentsId && m.reaction == false),
+                            isLiked = _context.Reactions.Any(m => m.userId == add.id && m.SubCommentsId == sc.SubCommentsId && m.reaction == true),
+                            isDisliked = _context.Reactions.Any(m => m.userId == add.id && m.SubCommentsId == sc.SubCommentsId && m.reaction == false),
                             username = _context.Users.FirstOrDefault(u => u.Id == sc.userId).UserName,
                             picutres = _context.Users.FirstOrDefault(u => u.Id == sc.userId).UsersPictrues,
                             userId= _context.Users.FirstOrDefault(u => u.Id == sc.userId).Id,
@@ -392,59 +429,90 @@ user => user.Id,
             return Ok(addedComment);
 
         }
-
-
-        [HttpPost("delete comment/{courseId}/{lessonsNumber}/{id}/{token}/{commentId}/{commentType}")]
-        public async Task<IActionResult> deleteComment(int courseId, int lessonsNumber, string id, string token, int commentId,int commentType)
+        public class DeleteComment
         {
-            Users user = await _tokenGenerator.GetUserFromToken(token);
-            if (user == null)
-            {
-                return NotFound();
-            }
-            if (user.Id != id)
+            public int courseId { get; set; }
+            public int lessonsNumber {  get; set; }
+            public string id {  get; set; }
+            public string token {  get; set; }
+            public int commentId {  get; set; }
+            public int commentType {  get; set; }
+        }
+
+        // Define a method to delete reactions associated with a comment
+        private void DeleteReactionsForComment(int commentId)
+        {
+            var reactions = _context.Reactions.Where(r => r.commentId == commentId);
+            _context.Reactions.RemoveRange(reactions);
+            _context.SaveChanges();
+        }
+
+        [HttpPost("delete comment")]
+        public async Task<IActionResult> deleteComment([FromBody] DeleteComment delete)
+        {
+            // Validate user and course
+            Users user = await _tokenGenerator.GetUserFromToken(delete.token);
+            var course = _context.Courses.FirstOrDefault(m => m.courseId == delete.courseId);
+            if (user == null || course == null || user.Id != delete.id)
             {
                 return BadRequest();
             }
 
-            var lesson = await _context.Lessons
-                .FirstOrDefaultAsync(m => m.lessonsNum == lessonsNumber && m.courseId == courseId);
+            // Retrieve lesson
+            var lesson = await _context.Lessons.FirstOrDefaultAsync(m => m.lessonsNum == delete.lessonsNumber && m.courseId == delete.courseId);
             if (lesson == null)
             {
                 return NotFound();
             }
-            if (commentType == 1) {
-            var comment = _context.Comments.Where(m => m.CommentsId == commentId).FirstOrDefault();
-            if(comment== null)
+
+            // Delete comment or subcomment
+            if (delete.commentType == 1)
             {
-                return BadRequest();
-            }
-            else if(comment.UsersId != id)
-            {
-                return BadRequest();
-            }
-            _context.Comments.Remove(comment);
-            _context.SaveChanges();
-            }
-            else
-            {
-                var comment = _context.SubComments.Where(m => m.SubCommentsId == commentId).FirstOrDefault();
+                var comment = _context.Comments.FirstOrDefault(m => m.CommentsId == delete.commentId);
                 if (comment == null)
                 {
                     return BadRequest();
                 }
-                else if (comment.userId != id)
+
+                // Check ownership or course instructor
+                if (course.UsersId == delete.id || comment.UsersId == delete.id)
+                {
+                    // Delete associated reactions
+                    DeleteReactionsForComment(comment.CommentsId);
+
+                    _context.Comments.Remove(comment);
+                    _context.SaveChanges();
+                }
+                else
                 {
                     return BadRequest();
                 }
-                _context.SubComments.Remove(comment);
-                _context.SaveChanges();
             }
+            else
+            {
+                var subComment = _context.SubComments.FirstOrDefault(m => m.SubCommentsId == delete.commentId);
+                if (subComment == null)
+                {
+                    return BadRequest();
+                }
+
+                // Check ownership or course instructor
+                if (course.UsersId == delete.id || subComment.userId == delete.id)
+                {
+                    _context.SubComments.Remove(subComment);
+                    _context.SaveChanges();
+                }
+                else
+                {
+                    return BadRequest();
+                }
+            }
+
             return Ok();
         }
 
-        
-        
+
+
 
 
         [HttpPost("add reaction")]
@@ -516,20 +584,28 @@ user => user.Id,
             }
         }
 
-        [HttpPost("delete reaction/{id}/{token}/{commentId}/{commentType}")]
-        public async Task<IActionResult> deleteReaction(string id, string token, int commentId,int commentType)
+        public class DeleteReacions
         {
-            Users user = await _tokenGenerator.GetUserFromToken(token);
+            public string id { get; set; }
+            public string token {  get; set; }
+            public int commentId {  get; set; }
+            public int commentType {  get; set; }
+        }
+
+        [HttpPost("delete reaction")]
+        public async Task<IActionResult> deleteReaction([FromBody] DeleteReacions delete)
+        {
+            Users user = await _tokenGenerator.GetUserFromToken(delete.token);
             if (user == null)
             {
                 return NotFound();
             }
-            if(user.Id != id)
+            if(user.Id != delete.id)
             {
                 return BadRequest();
             }
-            if (commentType == 1) { 
-            var reaction=_context.Reactions.Where(m=>m.userId == id&& m.commentId==commentId).FirstOrDefault();
+            if (delete.commentType == 1) { 
+            var reaction=_context.Reactions.Where(m=>m.userId == delete.id && m.commentId== delete.commentId).FirstOrDefault();
                 if (reaction == null)
                 {
                     return BadRequest();
@@ -540,7 +616,7 @@ user => user.Id,
             }
             else
             {
-                var reaction = _context.Reactions.Where(m => m.userId == id && m.SubCommentsId == commentId).FirstOrDefault();
+                var reaction = _context.Reactions.Where(m => m.userId == delete.id && m.SubCommentsId == delete.commentId).FirstOrDefault();
                 if (reaction == null)
                 {
                     return BadRequest();
@@ -568,35 +644,6 @@ user => user.Id,
 
 
 
-        [HttpGet]
-        public IEnumerable<string> Get()
-        {
-            return new string[] { "value1", "value2" };
-        }
-
-        // GET api/<lessonsController>/5
-        [HttpGet("{id}")]
-        public string Get(int id)
-        {
-            return "value";
-        }
-
-        // POST api/<lessonsController>
-        [HttpPost]
-        public void Post([FromBody] string value)
-        {
-        }
-
-        // PUT api/<lessonsController>/5
-        [HttpPut("{id}")]
-        public void Put(int id, [FromBody] string value)
-        {
-        }
-
-        // DELETE api/<lessonsController>/5
-        [HttpDelete("{id}")]
-        public void Delete(int id)
-        {
-        }
+       
     }
 }

@@ -32,20 +32,24 @@ namespace Courses.Controllers
 
 
 
-
-        // GET: api/<coursesController>
-        [HttpPost("get teacher courses/{token}/{id}")]
-        public async Task<ActionResult<IEnumerable<Models.Courses>>> GetCourses(string token, string id)
+        public class CourseUserData
         {
-            Users user = await _tokenGenerator.GetUserFromToken(token);
+            public string id { get; set; }
+            public string token { get; set; }
+        }
+        // GET: api/<coursesController>
+        [HttpPost("get teacher courses")]
+        public async Task<ActionResult<IEnumerable<Models.Courses>>> GetCourses([FromBody] CourseUserData userData)
+        {
+            Users user = await _tokenGenerator.GetUserFromToken(userData.token);
             if (user == null)
             {
                 return NotFound("User Not Found !");
             }
-            else if (user.Id == id)
+            else if (user.Id == userData.id)
             {
                 var courses = await _context.Courses
-     .Where(c => c.UsersId == id)
+     .Where(c => c.UsersId == userData.id)
      .Select(c => new CourseDetails
      {
          CourseId = c.courseId,
@@ -59,7 +63,8 @@ namespace Courses.Controllers
          CoursesCatagory = c.CoursesCatagory,
          CouresLanguage = c.CouresLanguage,
          Date = c.Date,
-         Rating = c.Rating
+         Rating = c.Rating,
+         TeacherPicture = _context.Users.Where(u => u.Id == c.UsersId).FirstOrDefault()!.UsersPictrues
      })
      .ToListAsync();
 
@@ -73,7 +78,7 @@ namespace Courses.Controllers
         }
         public class CourseDetails
         {
-            public int CourseId { get; set; }
+            public int? CourseId { get; set; }
             public string CourseName { get; set; }
             public int NumberOfStudents { get; set; }
             public string TeacherName { get; set; }
@@ -86,31 +91,45 @@ namespace Courses.Controllers
             public string CouresLanguage { get; set; }
             public DateTime Date { get; set; }
             public int Rating { get; set; }
-
+            public string token { get; set; }
+            public string id { get; set; }
 
 
 
 
         }
 
-        [HttpPost("insert Course/{id}/{token}")]
-        public async Task<ActionResult<string>> insetCourse(string token, string id, Models.Courses course)
+        [HttpPost("insert Course")]
+        public async Task<ActionResult<string>> insetCourse([FromBody] coursesDTO courses)
         {
+
+
             try
             {
-                Users user = await _tokenGenerator.GetUserFromToken(token);
+                Users user = await _tokenGenerator.GetUserFromToken(courses.token);
                 if (user == null)
                 {
                     return NotFound();
                 }
-                else if (user.Id == id)
+                else if (user.Id == courses.usersId)
                 {
-                    if (user.Id == course.UsersId)
+                    if (user.Id == courses.usersId)
                     {
-                        _context.Courses.Add(course);
+                        var newCourse = new Models.Courses()
+                        {
+                            CouresDescription = courses.couresDescription,
+                            CouresLanguage = courses.couresLanguage,
+                            CouresName = courses.couresName,
+                            CouresType = courses.CouresType,
+                            CouresValue = courses.couresValue,
+                            CoursesCatagory = courses.coursesCatagory,
+                            UsersId = user.Id,
+                            Pictures = courses.pictures,
+                        };
+                        _context.Courses.Add(newCourse);
                         _context.SaveChanges();
 
-                        var courseId = course.courseId;
+                        var courseId = courses.courseId;
 
                         return Ok(new { message = "Insert Successfully!", courseId });
                     }
@@ -188,7 +207,7 @@ namespace Courses.Controllers
         public async Task<ActionResult<Models.Courses>> getCourse([FromBody] Filter filter)
         {
 
-            var courses = _context.Courses.ToList();
+            var courses = await _context.Courses.ToListAsync();
 
             if (filter.sort == "eralist")
             {
@@ -272,7 +291,7 @@ namespace Courses.Controllers
         [HttpPost("get course/{courseId}")]
         public async Task<ActionResult<Models.Courses>> getCourse(int courseId)
         {
-           
+
             var course = await _context.Courses.FirstOrDefaultAsync(m => m.courseId == courseId);
             if (course == null)
             {
@@ -298,31 +317,37 @@ namespace Courses.Controllers
             return Ok(Data);
         }
 
+        public class Updaterating
+        {
+            public string token { get; set; }
+            public string userId { get; set; }
+            public int courseId { get; set; }
+            public int rating { get; set; }
+        }
 
-
-        [HttpPost("updateCourseRating/{token}/{userId}/{courseId}/{rating}")]
-        public async Task<ActionResult<Models.Courses>> rating(string token, string userId, int courseId, int rating)
+        [HttpPost("updateCourseRating")]
+        public async Task<ActionResult<Models.Courses>> rating([FromBody] Updaterating update)
         {
 
-            Users user = await _tokenGenerator.GetUserFromToken(token);
+            Users user = await _tokenGenerator.GetUserFromToken(update.token);
             if (user == null)
             {
                 return BadRequest("user Not Found !");
             }
-            if (user.Id != userId)
+            if (user.Id != update.userId)
             {
                 return BadRequest("user Not Found !");
             }
 
             var ratingdata = new Rating()
             {
-                courseId = courseId,
+                courseId = update.courseId,
                 usersId = user.Id,
-                rating = rating
+                rating = update.rating
             };
             try
             {
-                var userRating = _context.Rating.Where(m => m.usersId == user.Id && m.courseId == courseId).FirstOrDefault();
+                var userRating = _context.Rating.Where(m => m.usersId == user.Id && m.courseId == update.courseId).FirstOrDefault();
 
                 if (userRating == null)
                 {
@@ -331,7 +356,7 @@ namespace Courses.Controllers
                 }
                 else
                 {
-                    userRating.rating = rating;
+                    userRating.rating = update.rating;
                     _context.Rating.Update(userRating);
                 }
                 _context.SaveChanges();
@@ -343,24 +368,31 @@ namespace Courses.Controllers
             }
 
         }
-        [HttpPost("checkRating/{token}/{userId}/{courseId}")]
-        public async Task<ActionResult<Models.Courses>> checkRating(string token, string userId, int courseId)
+        public class Check
         {
-            Users user = await _tokenGenerator.GetUserFromToken(token);
+            public string token { get; set; }
+            public string userId { get; set; }
+            public int courseId { get; set; }
+        }
+
+        [HttpPost("checkRating")]
+        public async Task<ActionResult<Models.Courses>> checkRating([FromBody] Check check)
+        {
+            Users user = await _tokenGenerator.GetUserFromToken(check.token);
             if (user == null)
             {
                 return BadRequest("user Not Found !");
             }
-            if (user.Id != userId)
+            if (user.Id != check.userId)
             {
                 return BadRequest("user Not Found !");
             }
-            var isPaid = _context.Enrollments.Where(m => m.UserId == userId && m.CouresId == courseId).FirstOrDefault();
+            var isPaid = _context.Enrollments.Where(m => m.UserId == check.userId && m.CouresId == check.courseId).FirstOrDefault();
             if (isPaid == null)
             {
                 return BadRequest("You must buy this course.");
             }
-            var userRating = _context.Rating.Where(m => m.usersId == user.Id && m.courseId == courseId).FirstOrDefault();
+            var userRating = _context.Rating.Where(m => m.usersId == user.Id && m.courseId == check.courseId).FirstOrDefault();
 
             if (userRating == null)
             {
@@ -376,7 +408,8 @@ namespace Courses.Controllers
                 return Ok(oldRating);
             }
         }
-        [HttpPost("get most common courses")]
+
+        [HttpGet("get most common courses/{id}")]
         public async Task<ActionResult<Models.Courses>> commonCourses()
         {
             var course = _context.Courses.OrderByDescending(m => m.Rating).ThenBy(m => m.CouresValue).Take(10).ToList().Select(c => new CourseDetails
@@ -400,17 +433,19 @@ namespace Courses.Controllers
 
         }
 
-        [HttpPost("getCourseDataForTeacher/{token}/{userId}/{courseId}")]
-        public async Task<ActionResult<Models.Courses>> getCourseDataForTeacher(string token, string userId, int courseId)
+
+
+        [HttpPost("getCourseDataForTeacher")]
+        public async Task<ActionResult<Models.Courses>> getCourseDataForTeacher([FromBody] Check courseData)
         {
-            Users user = await _tokenGenerator.GetUserFromToken(token);
+            Users user = await _tokenGenerator.GetUserFromToken(courseData.token);
             if (user == null)
             {
                 return BadRequest("user Not Found !");
             }
-            if (user.Id == userId)
+            if (user.Id == courseData.userId)
             {
-                var course = _context.Courses.Where(m => m.courseId == courseId).FirstOrDefault();
+                var course = _context.Courses.Where(m => m.courseId == courseData.courseId).FirstOrDefault();
                 if (course == null)
                 {
                     return NotFound();
@@ -431,32 +466,46 @@ namespace Courses.Controllers
             }
         }
 
-        [HttpPost("update course/{token}/{userId}/{courseId}")]
-        public async Task<ActionResult<Models.Courses>> updateCouese(string token, string userId, int courseId, Models.Courses courses)
+        public class coursesDTO
         {
-            Users user = await _tokenGenerator.GetUserFromToken(token);
+            public string couresName { get; set; }
+            public string couresDescription { get; set; }
+            public string CouresType { get; set; }
+            public string coursesCatagory { get; set; }
+            public string couresLanguage { get; set; }
+            public int couresValue { get; set; }
+            public string usersId { get; set; }
+            public string token { get; set; }
+            public int courseId { get; set; }
+            public string? pictures { get; set; }
+        }
+
+        [HttpPost("update course")]
+        public async Task<ActionResult<Models.Courses>> updateCouese([FromBody] coursesDTO courses)
+        {
+            Users user = await _tokenGenerator.GetUserFromToken(courses.token);
             if (user == null)
             {
                 return BadRequest("user Not Found !");
             }
-            if (user.Id == userId)
+            if (user.Id == courses.usersId)
             {
-                if (user.Id == courses.UsersId)
+                if (user.Id == courses.usersId)
                 {
-                    var olddata = _context.Courses.Where(m => m.courseId == courseId).FirstOrDefault();
+                    var olddata = _context.Courses.Where(m => m.courseId == courses.courseId).FirstOrDefault();
                     if (olddata == null)
                     {
                         return NotFound();
                     }
 
-                    olddata.CouresDescription = courses.CouresDescription;
+                    olddata.CouresDescription = courses.couresDescription;
 
-                    olddata.CouresName = courses.CouresName;
+                    olddata.CouresName = courses.couresName;
 
                     olddata.CouresType = courses.CouresType;
-                    olddata.CouresValue = courses.CouresValue;
-                    olddata.CouresLanguage = courses.CouresLanguage;
-                    olddata.CoursesCatagory = courses.CoursesCatagory;
+                    olddata.CouresValue = courses.couresValue;
+                    olddata.CouresLanguage = courses.couresLanguage;
+                    olddata.CoursesCatagory = courses.coursesCatagory;
 
 
 
@@ -478,25 +527,30 @@ namespace Courses.Controllers
             }
 
         }
-        [HttpDelete("delete course/{token}/{userId}/{courseId}")]
-        public async Task<ActionResult<Models.Courses>> deleteCourse(string token, string userId, int courseId)
+
+
+
+        [HttpPost("delete course")]
+        public async Task<ActionResult<Models.Courses>> deleteCourse([FromBody] Check check)
         {
-            Users user = await _tokenGenerator.GetUserFromToken(token);
+            Users user = await _tokenGenerator.GetUserFromToken(check.token);
             if (user == null)
             {
                 return BadRequest("user Not Found !");
             }
-            if (user.Id == userId)
+            if (user.Id == check.userId)
             {
-                var course = _context.Courses.Where(m => m.courseId == courseId).FirstOrDefault();
+                var course = _context.Courses.Where(m => m.courseId == check.courseId).FirstOrDefault();
                 if (course == null)
                 {
                     return NotFound();
                 }
-                if (user.Id == course.UsersId)
+                var roles = await _userManeger.GetRolesAsync(user);
+               
+                if (user.Id == course.UsersId || roles.FirstOrDefault() == "admin")
                 {
-                    int? courseIdFilter = courseId; // Convert to nullable int
-                    var enrollmentsToUpdate = _context.Enrollments.Where(e => e.CouresId == courseId).ToList();
+                    int? courseIdFilter = check.courseId; // Convert to nullable int
+                    var enrollmentsToUpdate = _context.Enrollments.Where(e => e.CouresId == check.courseId).ToList();
 
                     foreach (var enrollment in enrollmentsToUpdate)
                     {
@@ -505,7 +559,7 @@ namespace Courses.Controllers
                     _context.SaveChanges();
 
                     // Now, you can safely delete the course
-                    var courseToDelete = _context.Courses.FirstOrDefault(c => c.courseId == courseId);
+                    var courseToDelete = _context.Courses.FirstOrDefault(c => c.courseId == check.courseId);
                     if (courseToDelete != null)
                     {
                         _context.Courses.Remove(courseToDelete);
@@ -531,17 +585,35 @@ namespace Courses.Controllers
         }
 
 
-        [HttpPost("check course/{token}/{userId}/{courseId}")]
-        public async Task<ActionResult<Models.Courses>> checkCourse(string token, string userId, int courseId)
+        [HttpPost("check course")]
+        public async Task<ActionResult<Models.Courses>> checkCourse([FromBody] Check check)
         {
-            Users user = await _tokenGenerator.GetUserFromToken(token);
+            Users user = await _tokenGenerator.GetUserFromToken(check.token);
             if (user == null)
             {
                 return BadRequest("user Not Found !");
             }
-            if (user.Id == userId)
+            if (user.Id == check.userId)
             {
-                var ispurchased = _context.Enrollments.Where(m => m.UserId == userId && m.CouresId == courseId).FirstOrDefault();
+                var course = _context.Courses.Where(m => m.courseId == check.courseId).FirstOrDefault();
+                if (course == null)
+                {
+                    return BadRequest();
+                }
+                else if (course.UsersId == check.userId)
+                {
+                    return Ok();
+                }
+
+                else
+                {
+                    var roles = await _userManeger.GetRolesAsync(user);
+                    if (roles.FirstOrDefault() == "admin")
+                    {
+                        return Ok();
+                    }
+                }
+                var ispurchased = _context.Enrollments.Where(m => m.UserId == check.userId && m.CouresId == check.courseId).FirstOrDefault();
                 if (ispurchased == null)
                 {
                     return BadRequest("You must buy this course.");
@@ -559,26 +631,34 @@ namespace Courses.Controllers
 
 
         }
+        public class UserData
 
-        [HttpPost("get user courses/{token}/{userId}")]
-        public async Task<ActionResult<Models.Courses>> getUserCourses(string token, string userId)
         {
-            Users user = await _tokenGenerator.GetUserFromToken(token);
+            public string id { get; set; }
+            public string token { get; set; }
+        }
+
+
+        [HttpPost("get user courses")]
+        public async Task<ActionResult<Models.Courses>> getUserCourses([FromBody] UserData userdata)
+        {
+            Users user = await _tokenGenerator.GetUserFromToken(userdata.token);
             if (user == null)
             {
                 return BadRequest("user Not Found !");
             }
-            if (user.Id != userId) { 
+            if (user.Id != userdata.id)
+            {
                 return BadRequest("");
             }
-            var enrollments = await _context.Enrollments.Where(m=>m.UserId==userId).ToListAsync();
-            if(enrollments == null)
+            var enrollments = await _context.Enrollments.Where(m => m.UserId == userdata.id).ToListAsync();
+            if (enrollments == null)
             {
                 return BadRequest("there is no courses");
             }
 
             var data = enrollments
-                .Where(m => m.UserId==userId)
+                .Where(m => m.UserId == userdata.id)
                 .Select(enrollment => new CourseDetails
                 {
                     CourseId = enrollment.CouresId ?? 1,
@@ -586,7 +666,7 @@ namespace Courses.Controllers
                     NumberOfStudents = _context.Enrollments.Count(e => e.CouresId == enrollment.CouresId),
                     TeacherName = _context.Users.FirstOrDefault(u => u.Id == enrollment.teacherId)?.UserName,
                     TeacherPicture = _context.Users.FirstOrDefault(u => u.Id == enrollment.teacherId)?.UsersPictrues,
-                    Picture = _context.Courses.Where(m=>m.courseId==enrollment.CouresId).FirstOrDefault().Pictures,
+                    Picture = _context.Courses.Where(m => m.courseId == enrollment.CouresId).FirstOrDefault().Pictures,
                     CouresValue = _context.Courses.Where(m => m.courseId == enrollment.CouresId).FirstOrDefault().CouresValue,
                     CouresDescription = _context.Courses.Where(m => m.courseId == enrollment.CouresId).FirstOrDefault().CouresDescription,
                     CouresType = _context.Courses.Where(m => m.courseId == enrollment.CouresId).FirstOrDefault().CouresType,
@@ -595,12 +675,38 @@ namespace Courses.Controllers
                     Date = _context.Courses.Where(m => m.courseId == enrollment.CouresId).FirstOrDefault().Date,
                     Rating = _context.Courses.Where(m => m.courseId == enrollment.CouresId).FirstOrDefault().Rating,
                 }).ToList();
-            return Ok(data); 
+            return Ok(data);
 
 
         }
-    }
 
+
+        [HttpPost("Bad Courses")]
+        public async Task<ActionResult<Models.Courses>> BadCourses([FromBody] UserData userdata)
+        {
+            Users user = await _tokenGenerator.GetUserFromToken(userdata.token);
+            if (user == null)
+            {
+                return BadRequest("user Not Found !");
+            }
+            if (user.Id != userdata.id)
+            {
+                return BadRequest("");
+            }
+            var roles = await _userManeger.GetRolesAsync(user);
+            if (roles.FirstOrDefault() != "admin")
+            {
+                return BadRequest();
+            }
+            var badCourses = _context.Courses.Where(m => m.Rating < 3).ToList();
+            if (badCourses.Any()) {
+                return Ok(badCourses);
+
+            }
+            return BadRequest("there is no bad Courses");
+
+        }
+    }
     public class ratingDTO 
     {
         public int rating {  get; set; }

@@ -20,6 +20,8 @@ using Microsoft.AspNetCore.WebUtilities;
 using System.Text;
 using System.Threading.Tasks;
 using NuGet.Common;
+using static Courses.Controllers.adminController;
+using Microsoft.AspNetCore.Cors;
 // For more information on enabling Web API for empty projects, visit https://go.microsoft.com/fwlink/?LinkID=397860
 
 namespace Courses.Controllers
@@ -35,8 +37,9 @@ namespace Courses.Controllers
         private readonly IConfiguration _configuration;
         private readonly GenarateToken _tokenGenerator;
         private readonly Cloudinary _cloudinary;
+        private readonly RoleManager<IdentityRole> _roleManager;
 
-        public UsersController(Connections conections, UserManager<Users> userManeger, SignInManager<Users> signInManeger, IConfiguration configuration,IEmailSender emailSender, GenarateToken tokenGenerator, Cloudinary cloudinary)
+        public UsersController(Connections conections, UserManager<Users> userManeger, SignInManager<Users> signInManeger, IConfiguration configuration, IEmailSender emailSender, GenarateToken tokenGenerator, Cloudinary cloudinary)
         {
             _context = conections;
             _userManeger = userManeger;
@@ -48,22 +51,131 @@ namespace Courses.Controllers
 
 
         }
-
-        // GET: api/<UsersController>
-        [HttpGet("get all users/{token}/{userId}")]
-        public async Task<IActionResult> Get(string token,string userId)
+        public class UserRoleSummary
         {
-            Users user = await _tokenGenerator.GetUserFromToken(token);
-            if(user == null) { 
-            return BadRequest("the token is not valid !");    
+            public string Role { get; set; }
+            public int UserCount { get; set; }
+        }
+        public class EnrollmentSummary
+        {
+            public DateTime Date { get; set; }
+            public int TotalEnrollments { get; set; }
+        }
+        public class CourseChartData
+        {
+            public string? Name { get; set; }
+            public int? Value { get; set; }
+        }
+        public class CourseSummary
+        {
+            public DateTime Date { get; set; }
+            public int TotalCourses { get; set; }
+        }
+
+        [HttpPost("getData")]
+        public async Task<IActionResult> adminData([FromBody] userData adminData)
+        {
+            Users user = await _tokenGenerator.GetUserFromToken(adminData.token);
+            if (user == null)
+            {
+                return NotFound("User not found!");
             }
-            if(user.Id != userId)
+            if (user.Id != adminData.id)
+            {
+                return BadRequest("You don't have access");
+            }
+            var roles = await _userManeger.GetRolesAsync(user);
+            if (roles.FirstOrDefault() != "admin")
+            {
+                return BadRequest();
+            }
+
+            var allCourses = _context.Courses.ToList().Count();
+
+            var usersByRole = _context.UserRoles
+       .Join(
+           _context.Roles,
+           userRole => userRole.RoleId,
+           role => role.Id,
+           (userRole, role) => new { UserRole = userRole, RoleName = role.Name }
+       )
+       .GroupBy(joined => joined.RoleName)
+       .Select(g => new UserRoleSummary
+       {
+           Role = g.Key,
+           UserCount = g.Count()
+       })
+       .ToList();
+
+            var balnced = _context.Enrollments.Select(m => m.enrollmentValue).Sum();
+
+            // Get summaries of enrollments
+            var summaries = _context.Enrollments
+                .GroupBy(e => e.EnrollmentDate.Date)
+                .Select(g => new EnrollmentSummary
+                {
+                    Date = g.Key,
+                    TotalEnrollments = g.Sum(e => e.enrollmentValue)
+                })
+                .ToList();
+
+            // Get chart data for courses by category
+            var chartData = _context.Courses
+                .GroupBy(c => c.CoursesCatagory)
+                .Select(g => new CourseChartData
+                {
+                    Name = g.Key,
+                    Value = g.Count()
+                })
+                .ToList();
+
+            // Get total number of courses per day
+            var coursesPerDay = _context.Courses
+                .GroupBy(c => c.Date.Date)
+                .Select(g => new CourseSummary
+                {
+                    Date = g.Key,
+                    TotalCourses = g.Count() // Count the total number of courses for each day
+                })
+                .ToList();
+
+            var data = new
+            {
+                numberofCourses = allCourses,
+                Roles = usersByRole,
+                summaries = summaries,
+                pieChartData = chartData,
+                coursesPerDay = coursesPerDay, // Include the total number of courses per day in the response
+                balnced = balnced
+            };
+
+            return Ok(data);
+        }
+
+        [HttpPost("get all users and teacher")]
+        [AllowAnonymous]
+        public async Task<IActionResult> getAllUsers([FromBody] userData Datauser)
+        {
+            Users user = await _tokenGenerator.GetUserFromToken(Datauser.token);
+            if (user == null) {
+                return BadRequest("the token is not valid !");
+            }
+            if (user.Id != Datauser.id)
             {
                 return BadRequest("");
             }
             var roles = await _userManeger.GetRolesAsync(user);
             if (roles.FirstOrDefault() == "admin") {
-                return Ok(_context.Users.ToList());
+                var teachers = await _userManeger.GetUsersInRoleAsync("teacher");
+                var users = await _userManeger.GetUsersInRoleAsync("users");
+
+                var allData = new
+                {
+                    teacher = teachers,
+                    users = users
+                };
+
+                return Ok(allData);
             }
             else
             {
@@ -84,9 +196,9 @@ namespace Courses.Controllers
             {
                 return NotFound("didnt find this Email");
             }
-            if(user.EmailConfirmed == false)
+            if (user.EmailConfirmed == false)
             {
-                return BadRequest("you must confierm your email");
+                return BadRequest("you must confirm your email");
             }
             var result = await _signInManeger.PasswordSignInAsync(user, password, false, false);
             if (result.Succeeded)
@@ -98,8 +210,8 @@ namespace Courses.Controllers
                 var response = new
                 {
                     Role = roles.FirstOrDefault(), // Assuming a user can have only one role
-                    usertoken= token,
-                    Id=user.Id
+                    usertoken = token,
+                    Id = user.Id
                 };
                 return Ok(response);
             }
@@ -150,15 +262,23 @@ namespace Courses.Controllers
 
             if (user != null)
             {
-                return BadRequest("This email address is already in use.");
+                return BadRequest(new { message = "This email address is already in use" });
+
             }
 
+            var userWithSameUsername = await _userManeger.FindByNameAsync(registerViewModel.UserName);
+            if (userWithSameUsername != null)
+            {
+                return BadRequest(new { message = $"This {registerViewModel.UserName} is already in use" });
+
+            }
 
             var newUser = new Users()
             {
                 UserName = registerViewModel.UserName,
                 Email = registerViewModel.Email,
-                PhoneNumber = registerViewModel.PhoneNumber
+                PhoneNumber = registerViewModel.PhoneNumber,
+                UsersPictrues=registerViewModel.UsersPictrues
             };
 
             var newUserResponse = await _userManeger.CreateAsync(newUser, registerViewModel.PasswordHash);
@@ -173,35 +293,41 @@ namespace Courses.Controllers
                 var encodedToken = WebEncoders.Base64UrlEncode(Encoding.UTF8.GetBytes(emailConfirmationToken));
 
                 // Construct the confirmation link
-                var confirmationLink = $"http://localhost:4200/confirm-email/{newUser.Id}/{encodedToken}";
+                var confirmationLink = $"https://coursesv3.vercel.app/confirm-email/{newUser.Id}/{encodedToken}";
 
                 // Send confirmation email using IEmailSender
                 // Assuming you have an email sender service
                 await _emailSender.SendEmailAsync(newUser.Email, "Confirm your email", $"Please confirm your account by clicking this link: <a href='{confirmationLink}'>Confirm Email</a>");
+                return Ok(new { message = "Registration successful. Please check your email for confirmation" });
 
-                return Ok("Registration successful. Please check your email for confirmation.");
 
             }
 
             // If registration fails, return errors
-            return BadRequest(string.Join("\n", newUserResponse.Errors.Select(e => e.Description)));
+            return BadRequest(new { message = string.Join("\n", newUserResponse.Errors.Select(e => e.Description)) });
         }
 
-        [HttpPost("upload user pictures/{id}/{token}")]
-        public async Task<IActionResult> uploadUserImage(string id, string token, IFormFile file)
+        [HttpPost("upload user pictures")]
+        public async Task<IActionResult> UploadUserImage([FromForm] IFormFile file, [FromForm] string id, [FromForm] string token)
         {
+            if (file == null || string.IsNullOrEmpty(id) || string.IsNullOrEmpty(token))
+            {
+                return BadRequest(new { message = "Invalid input data" });
+            }
+
             Users user = await _tokenGenerator.GetUserFromToken(token);
             if (user == null)
             {
-                return NotFound("User not found!");
+
+                return NotFound(new { message = "User not found!" });
             }
 
             if (user.Id != id)
             {
-                return BadRequest("You don't have access");
+                return BadRequest(new { message = "You don't have access" });
             }
             if (file == null || file.Length == 0)
-                return BadRequest("No file uploaded.");
+                return BadRequest(new { message = "No file uploaded." });
 
             // Upload image to Cloudinary
             var uploadParams = new ImageUploadParams()
@@ -223,34 +349,39 @@ namespace Courses.Controllers
         }
 
 
-
-
-        [HttpPost("confirmemail/{userId}/{token}")]
-        [AllowAnonymous]
-        public async Task<IActionResult> ConfirmEmail(string userId, string token)
+        public class confirem
         {
-            if (userId == null || token == null)
+            public string userId { get; set; }
+            public string token { get; set; }
+        }
+
+        [HttpPost("confirmemail")]
+        [AllowAnonymous]
+        public async Task<IActionResult> ConfirmEmail([FromBody] confirem confirem)
+        {
+            if (confirem.userId == null || confirem.token == null)
             {
-                return BadRequest("Invalid token or user ID.");
+                return BadRequest(new { message = "Error confirming email. " });
             }
-            var decodedTokenBytes = WebEncoders.Base64UrlDecode(token);
+            var decodedTokenBytes = WebEncoders.Base64UrlDecode(confirem.token);
             var decodedToken = Encoding.UTF8.GetString(decodedTokenBytes);
 
-            var user = await _userManeger.FindByIdAsync(userId);
+            var user = await _userManeger.FindByIdAsync(confirem.userId);
             if (user == null)
             {
-                return BadRequest("User not found.");
+                return BadRequest(new { message = "Error confirming email. " });
             }
 
             var result = await _userManeger.ConfirmEmailAsync(user, decodedToken);
 
             if (result.Succeeded)
             {
-                return Ok("Email confirmed successfully.");
+                return Ok(new { message = "done confirming email. " });
             }
             else
             {
-                return BadRequest("Error confirming email.");
+                return BadRequest(new { message = "Error confirming email. " });
+
             }
 
         }
@@ -266,13 +397,14 @@ namespace Courses.Controllers
 
             var emailChangeToken = await _userManeger.GenerateUserTokenAsync(user, TokenOptions.DefaultProvider, "ChangeEmail");
             var encodedToken = WebEncoders.Base64UrlEncode(Encoding.UTF8.GetBytes(emailChangeToken));
-            var confirmationLink = $"http://localhost:4200/changeEmail?token={encodedToken}&email={oldEmail}";
+            var confirmationLink = $"https://coursesv3.vercel.app/changeEmail?token={encodedToken}&email={oldEmail}";
 
             await _emailSender.SendEmailAsync(oldEmail, "Confirm your email change", $"Please confirm your email change by clicking this link: <a href='{confirmationLink}'>Confirm Email Change</a>");
 
-            return Ok(new { message = "\"Confirmation link has been sent to your email.\""});
+            return Ok(new { message = "\"Confirmation link has been sent to your email.\"" });
 
         }
+
         [HttpPost("verify-email-change-token")]
         public async Task<IActionResult> VerifyEmailChangeToken([FromBody] VerifyEmailChangeTokenModel model)
         {
@@ -306,7 +438,7 @@ namespace Courses.Controllers
             {
                 return NotFound("User not found.");
             }
-            var Email=await _userManeger.FindByEmailAsync(model.NewEmail);
+            var Email = await _userManeger.FindByEmailAsync(model.NewEmail);
             if (Email != null)
             {
                 return BadRequest("email alardy used");
@@ -325,29 +457,30 @@ namespace Courses.Controllers
             var encodedNewEmailToken = WebEncoders.Base64UrlEncode(Encoding.UTF8.GetBytes(newEmailToken));
 
             // Construct the email confirmation link
-            var confirmationLink = $"http://localhost:4200/confirm-new-email/{user.Id}/{encodedNewEmailToken}/{model.NewEmail}";
+            var confirmationLink = $"https://coursesv3.vercel.app/confirm-new-email/{user.Id}/{encodedNewEmailToken}/{model.NewEmail}";
 
             // Send confirmation email to the new email address
             await _emailSender.SendEmailAsync(model.NewEmail, "Confirm your new email", $"Please confirm your new email by clicking this link: <a href='{confirmationLink}'>Confirm New Email</a>");
-            return Ok(new { message = "Please check your new email to confirm the change"});
+            return Ok(new { message = "Please check your new email to confirm the change" });
 
         }
 
+
         [HttpPost("confirm-new-email/{userId}/{token}/{newEmail}")]
-        public async Task<IActionResult> ConfirmNewEmail(string userId, string token, string newEmail)
+        public async Task<IActionResult> ConfirmNewEmail([FromBody] ChangeEmailModel changeEmailModel)
         {
-            var user = await _userManeger.FindByIdAsync(userId);
+            var user = await _userManeger.FindByIdAsync(changeEmailModel.userId);
             if (user == null)
             {
                 return NotFound("User not found.");
             }
 
             // Decode the token
-            var decodedTokenBytes = WebEncoders.Base64UrlDecode(token);
+            var decodedTokenBytes = WebEncoders.Base64UrlDecode(changeEmailModel.Token);
             var decodedToken = Encoding.UTF8.GetString(decodedTokenBytes);
 
             // Confirm the email change
-            var result = await _userManeger.ChangeEmailAsync(user, newEmail, decodedToken);
+            var result = await _userManeger.ChangeEmailAsync(user, changeEmailModel.NewEmail, decodedToken);
 
             if (result.Succeeded)
             {
@@ -366,21 +499,28 @@ namespace Courses.Controllers
 
         public class ChangeEmailModel
         {
-            public string Email { get; set; }
+            public string? userId { get; set; }
+            public string? Email { get; set; }
             public string Token { get; set; }
             public string NewEmail { get; set; }
         }
 
-        [HttpPost("getUserRole/{id}/{token}")]
-        public async Task<IActionResult> getUserRole(string id, string token)
+        public class userData
         {
-            Users user = await _tokenGenerator.GetUserFromToken(token);
+            public string id { get; set; }
+            public string token { get; set; }
+        }
+
+        [HttpPost("getUserRole")]
+        public async Task<IActionResult> getUserRole([FromBody] userData data)
+        {
+            Users user = await _tokenGenerator.GetUserFromToken(data.token);
             if (user == null)
             {
                 return NotFound("User not found!");
             }
 
-            if (user.Id != id)
+            if (user.Id != data.id)
             {
                 return BadRequest("You don't have access");
             }
@@ -391,66 +531,73 @@ namespace Courses.Controllers
             return Ok(roles);
         }
 
-        [HttpPost("getUserData/{id}/{token}")]
-        public async Task<IActionResult> getUserInformation(string id, string token)
+        [HttpPost("getUserData")]
+        public async Task<IActionResult> getUserInformation([FromBody] userData data)
         {
-            Users user = await _tokenGenerator.GetUserFromToken(token);
+            Users user = await _tokenGenerator.GetUserFromToken(data.token);
             if (user == null)
             {
                 return NotFound("User not found!");
             }
 
-            if (user.Id != id)
+            if (user.Id != data.id)
             {
                 return BadRequest("You don't have access");
             }
-           UserSTO userData=new UserSTO()
-           {
-               UserName = user.UserName,
-               PhoneNumber=user.PhoneNumber,
-               UsersPictrues=user.UsersPictrues,
-               userEmail=user.Email,
-           };
+            UserSTO userData = new UserSTO()
+            {
+                UserName = user.UserName,
+                PhoneNumber = user.PhoneNumber,
+                UsersPictrues = user.UsersPictrues,
+                userEmail = user.Email,
+            };
 
             return Ok(userData);
-          
+
 
         }
+        public class update
+        {
+            public string id { get; set; }
+            public string token { get; set; }
+            public string name { get; set; }
+            public string phoneNumber { get; set; }
+        }
 
-        [HttpPost("update user data/{id}/{token}/{name}/{number}")]
-        public async Task<IActionResult> UpdateUserData(string id, string token, string name, string number)
+        [HttpPost("update user data")]
+        public async Task<IActionResult> UpdateUserData([FromBody] update update)
         {
             // Validate input parameters
-            if (string.IsNullOrEmpty(id) || string.IsNullOrEmpty(token) || string.IsNullOrEmpty(name))
+            if (string.IsNullOrEmpty(update.id) || string.IsNullOrEmpty(update.token) || string.IsNullOrEmpty(update.name))
             {
                 return BadRequest("Invalid input parameters");
             }
             try
             {
-                Users user = await _tokenGenerator.GetUserFromToken(token);
+                Users user = await _tokenGenerator.GetUserFromToken(update.token);
                 if (user == null)
                 {
                     return NotFound("User not found!");
                 }
-                var users=_context.Users.Where(m=>m.UserName==name).FirstOrDefault();
+                var users = _context.Users.Where(m => m.UserName == update.name).FirstOrDefault();
                 if (users != null)
                 {
                     return BadRequest((new { message = " user name alaredy used." }));
                 }
-                if (user.Id != id)
+                if (user.Id != update.id)
                 {
                     return BadRequest("You don't have access");
                 }
                 else
                 {
-                    var oldUser = _context.Users.FirstOrDefault(u => u.Id == id);
+                    var oldUser = _context.Users.FirstOrDefault(u => u.Id == update.id);
                     if (oldUser == null)
                     {
                         return NotFound("User not found!");
                     }
-                    
-                    oldUser.UserName = name;
-                    oldUser.PhoneNumber = number;
+
+                    oldUser.UserName = update.name;
+                    oldUser.PhoneNumber = update.phoneNumber;
                     await _context.SaveChangesAsync(); // Save changes asynchronously
 
                     return Ok((new { message = " updated successfully." }));
@@ -468,15 +615,14 @@ namespace Courses.Controllers
             var user = await _userManeger.FindByEmailAsync(model.Email);
             if (user == null)
             {
-                return NotFound("User not found");
+                return NotFound(new { message = " User not found" });
             }
 
             var token = await _userManeger.GeneratePasswordResetTokenAsync(user);
             var encodedToken = WebEncoders.Base64UrlEncode(Encoding.UTF8.GetBytes(token));
 
-            var confirmationLink = $"http://localhost:4200/changePassword/{encodedToken}/{user.Email}";
+            var confirmationLink = $"https://coursesv3.vercel.app/changePassword/{encodedToken}/{user.Email}";
             await _emailSender.SendEmailAsync(user.Email, "Confirm Password Change", $"Please confirm your password change by clicking this link: <a href='{confirmationLink}'>Confirm Password Change</a>");
-
             return Ok(new { message = "Password change request initiated. Please check your email for confirmation." });
         }
         public class RequestPasswordChangeModel
@@ -532,8 +678,84 @@ namespace Courses.Controllers
 
             return Ok(new { message = "Password changed successfully" });
         }
+        public class contactData{
+            public string email { get; set; }
+            public string username { get; set; }
+            public string subject {  get; set; }
+            public string body { get; set; }
+
+}
+
+        [HttpPost("insert contact")]
+        public async Task<IActionResult> contact([FromBody] contactData model)
+        {
+
+            var user = _context.Users.Where(m => m.Email == model.email).FirstOrDefault();
+            if(user == null)
+            {
+                var contact = new Contact
+                {
+                    Email = model.email,
+                    subject = model.subject,
+                    Message = model.body
+                };
+                _context.Contacts.Add(contact);
+                _context.SaveChanges();
+            }
+            else
+            {
+                var contact = new Contact
+                {
+                    Email = model.email,
+                    subject = model.subject,
+                    Message = model.body,
+                    userId=user.Id
+                };
+                _context.Contacts.Add(contact);
+                _context.SaveChanges();
+            }
+            return Ok();
+           
+        }
+        public class delete
+        {
+            public string token { get; set; }
+        public string id {  get; set; }
+            public string userId {  get; set; }
+        }
 
 
+        [HttpPost("delete user")]
+        public async Task<IActionResult> deleteUser([FromBody] delete model)
+        {
+            Users user = await _tokenGenerator.GetUserFromToken(model.token);
+            if (user == null)
+            {
+                return NotFound("User not found!");
+            }
+            if (user.Id != model.id)
+            {
+                return BadRequest("You don't have access");
+            }
+            var roles = await _userManeger.GetRolesAsync(user);
+            if (roles.FirstOrDefault() != "admin")
+            {
+                return BadRequest();
+            }
+            var deleteduser = _context.Users.Where(m => m.Id == model.userId).FirstOrDefault();
+            if (deleteduser == null) {
+                return BadRequest();
+            }
+            var reactions = _context.Reactions.Where(r => r.userId == model.userId).ToList();
+            if (reactions.Any())
+            {
+                _context.Reactions.RemoveRange(reactions);
+                _context.SaveChanges();
+            }
+            _context.Users.Remove(deleteduser);
+            _context.SaveChanges();
+            return Ok();
+        }
 
         public class UserSTO
         {
@@ -542,7 +764,6 @@ namespace Courses.Controllers
             public string UsersPictrues { get; set; }
             public string userEmail { get; set; }
         }
-
 
 
 
